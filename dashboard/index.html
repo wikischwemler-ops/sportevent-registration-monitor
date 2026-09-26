@@ -1,0 +1,346 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#143a33">
+  <title>Sportevent Monitor | Status</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --ink: #172a24;
+      --muted: #63756d;
+      --line: #dce6e1;
+      --canvas: #f3f6f4;
+      --surface: #ffffff;
+      --forest: #143a33;
+      --green: #197456;
+      --green-soft: #e0f2e9;
+      --amber: #865900;
+      --amber-soft: #fff0cd;
+      --blue: #245b86;
+      --blue-soft: #e3f0fa;
+      --red: #a53636;
+      --red-soft: #fce6e3;
+      --gray-soft: #e9eeeb;
+    }
+
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      background: var(--canvas);
+      color: var(--ink);
+      font-family: "Segoe UI", system-ui, sans-serif;
+      line-height: 1.45;
+    }
+
+    header {
+      background: var(--forest);
+      color: #fff;
+      padding: 28px 24px 30px;
+    }
+
+    .header-inner, main, footer {
+      width: min(1120px, 100% - 40px);
+      margin-inline: auto;
+    }
+
+    .eyebrow {
+      margin: 0 0 8px;
+      color: #9ed2bc;
+      font-size: 12px;
+      font-weight: 700;
+      text-transform: uppercase;
+    }
+
+    h1 { margin: 0; font-size: 28px; line-height: 1.2; }
+    .run-line { margin: 10px 0 0; color: #d6e7df; font-size: 14px; }
+    .run-line a { color: #fff; }
+
+    main { padding-block: 24px 40px; }
+
+    .overview {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      border-block: 1px solid var(--line);
+      margin-bottom: 26px;
+    }
+
+    .metric { padding: 16px 18px; border-right: 1px solid var(--line); }
+    .metric:first-child { padding-left: 0; }
+    .metric:last-child { border-right: 0; }
+    .metric-label { display: block; color: var(--muted); font-size: 13px; }
+    .metric-value { display: block; margin-top: 2px; font-size: 25px; font-weight: 700; }
+
+    .toolbar {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 16px;
+    }
+
+    input, select, button {
+      min-height: 42px;
+      border: 1px solid #bdcdc5;
+      border-radius: 5px;
+      background: var(--surface);
+      color: var(--ink);
+      font: inherit;
+    }
+
+    input { flex: 1 1 280px; min-width: 0; padding: 8px 12px; }
+    select { flex: 0 1 210px; padding: 8px 32px 8px 12px; }
+    button { padding: 8px 14px; cursor: pointer; font-weight: 650; }
+    button:hover { background: #e9f2ed; }
+    input:focus-visible, select:focus-visible, button:focus-visible, a:focus-visible {
+      outline: 3px solid #7fc6a7;
+      outline-offset: 2px;
+    }
+
+    .events { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+    .event {
+      min-width: 0;
+      padding: 17px 18px;
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      background: var(--surface);
+    }
+
+    .event-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+    .event h2 { margin: 0; font-size: 17px; line-height: 1.3; overflow-wrap: anywhere; }
+    .event-subtitle { margin: 5px 0 0; color: var(--muted); font-size: 13px; }
+    .status {
+      flex: 0 0 auto;
+      padding: 4px 8px;
+      border-radius: 4px;
+      background: var(--gray-soft);
+      color: #43534c;
+      font-size: 11px;
+      font-weight: 750;
+    }
+
+    .status-open, .status-limited { background: var(--green-soft); color: #145b40; }
+    .status-scheduled, .status-approximate_date { background: var(--blue-soft); color: #214e72; }
+    .status-waitlist { background: var(--amber-soft); color: var(--amber); }
+    .status-sold_out, .status-cancelled { background: var(--red-soft); color: var(--red); }
+    .details {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 12px 18px;
+      margin-top: 18px;
+      padding-top: 14px;
+      border-top: 1px solid #edf1ef;
+    }
+
+    .detail-label { display: block; color: var(--muted); font-size: 11px; }
+    .detail-value { display: block; margin-top: 3px; font-size: 13px; overflow-wrap: anywhere; }
+    .event-link { display: inline-block; margin-top: 14px; color: #176a50; font-size: 13px; font-weight: 700; }
+    .empty, .error { grid-column: 1 / -1; padding: 28px 12px; color: var(--muted); text-align: center; }
+    .error { color: var(--red); }
+    footer { padding-bottom: 24px; color: var(--muted); font-size: 12px; }
+
+    @media (max-width: 720px) {
+      .header-inner, main, footer { width: min(100% - 28px, 1120px); }
+      header { padding: 23px 0 25px; }
+      h1 { font-size: 24px; }
+      .overview { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .metric { padding: 13px 12px; border-bottom: 1px solid var(--line); }
+      .metric:first-child { padding-left: 12px; }
+      .metric:nth-child(2) { border-right: 0; }
+      .metric:nth-child(3), .metric:nth-child(4) { border-bottom: 0; }
+      .metric:nth-child(3) { padding-left: 12px; }
+      .events { grid-template-columns: 1fr; }
+    }
+
+    @media (max-width: 480px) {
+      .toolbar { display: grid; grid-template-columns: 1fr auto; }
+      input { grid-column: 1 / -1; width: 100%; }
+      select { width: 100%; }
+      .event { padding: 15px; }
+      .details { gap: 11px 12px; }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="header-inner">
+      <p class="eyebrow">Sportevent Registration Monitor</p>
+      <h1>Statusübersicht</h1>
+      <p class="run-line" id="run-info" aria-live="polite">Lade Daten des letzten Laufs …</p>
+    </div>
+  </header>
+  <main>
+    <section class="overview" aria-label="Event-Übersicht">
+      <div class="metric"><span class="metric-label">Aktive Events</span><span class="metric-value" id="total-count">-</span></div>
+      <div class="metric"><span class="metric-label">Offen / knapp</span><span class="metric-value" id="open-count">-</span></div>
+      <div class="metric"><span class="metric-label">Termin bekannt</span><span class="metric-value" id="scheduled-count">-</span></div>
+      <div class="metric"><span class="metric-label">Warteliste / ausverkauft</span><span class="metric-value" id="waitlist-count">-</span></div>
+    </section>
+    <section class="toolbar" aria-label="Events filtern">
+      <input id="search" type="search" placeholder="Event suchen" aria-label="Event suchen">
+      <select id="status-filter" aria-label="Nach Status filtern">
+        <option value="">Alle Stati</option>
+        <option value="OPEN">Offen</option>
+        <option value="LIMITED">Wenige Plätze</option>
+        <option value="SCHEDULED">Termin bekannt</option>
+        <option value="APPROXIMATE_DATE">Ungefährer Termin</option>
+        <option value="WAITLIST">Warteliste</option>
+        <option value="SOLD_OUT">Ausverkauft</option>
+        <option value="NOT_OPEN">Noch nicht offen</option>
+        <option value="CLOSED">Geschlossen</option>
+        <option value="CANCELLED">Abgesagt</option>
+        <option value="UNKNOWN">Unbekannt</option>
+      </select>
+      <button id="refresh" type="button">Aktualisieren</button>
+    </section>
+    <section class="events" id="events" aria-live="polite"></section>
+  </main>
+  <footer>Die Seite zeigt den letzten Datenstand aus PostgreSQL.</footer>
+  <script>
+    const labels = {
+      ANNOUNCED: "Angekündigt", NOT_OPEN: "Noch nicht offen", APPROXIMATE_DATE: "Ungefährer Termin",
+      SCHEDULED: "Termin bekannt", OPEN: "Offen", LIMITED: "Wenige Plätze", WAITLIST: "Warteliste",
+      SOLD_OUT: "Ausverkauft", CLOSED: "Geschlossen", CANCELLED: "Abgesagt", UNKNOWN: "Unbekannt"
+    };
+    let snapshot = { events: [], last_run: null };
+
+    function formatDate(value, withTime = false) {
+      if (!value) return "Noch nicht bekannt";
+      const options = withTime ? { dateStyle: "medium", timeStyle: "short" } : { dateStyle: "medium" };
+      return new Intl.DateTimeFormat("de-DE", options).format(new Date(value));
+    }
+
+    function addDetail(parent, label, value) {
+      const wrapper = document.createElement("div");
+      const labelNode = document.createElement("span");
+      const valueNode = document.createElement("span");
+      labelNode.className = "detail-label";
+      labelNode.textContent = label;
+      valueNode.className = "detail-value";
+      valueNode.textContent = value || "-";
+      wrapper.append(labelNode, valueNode);
+      parent.append(wrapper);
+    }
+
+    function safeRegistrationUrl(value) {
+      if (!value) return null;
+      try {
+        const url = new URL(value);
+        return ["http:", "https:"].includes(url.protocol) ? url.href : null;
+      } catch {
+        return null;
+      }
+    }
+
+    function renderEvent(event) {
+      const card = document.createElement("article");
+      card.className = "event";
+      const heading = document.createElement("div");
+      heading.className = "event-heading";
+      const titleBlock = document.createElement("div");
+      const title = document.createElement("h2");
+      title.textContent = event.name || `Event ${event.id}`;
+      titleBlock.append(title);
+      if (event.sport || event.location) {
+        const subtitle = document.createElement("p");
+        subtitle.className = "event-subtitle";
+        subtitle.textContent = [event.sport, event.location].filter(Boolean).join(" · ");
+        titleBlock.append(subtitle);
+      }
+      const status = event.status || "UNKNOWN";
+      const badge = document.createElement("span");
+      badge.className = `status status-${status.toLowerCase()}`;
+      badge.textContent = labels[status] || status;
+      heading.append(titleBlock, badge);
+
+      const details = document.createElement("div");
+      details.className = "details";
+      addDetail(details, "Eventdatum", formatDate(event.event_date));
+      addDetail(details, "Anmeldestart", event.registration_start
+        ? formatDate(event.registration_start, true)
+        : event.approximate_registration_text || "Noch nicht bekannt");
+      addDetail(details, "Zuletzt geprüft", formatDate(event.last_checked_at, true));
+      addDetail(details, "Nächste Prüfung", formatDate(event.next_check_at, true));
+      if (event.participant_limit) addDetail(details, "Teilnehmerlimit", String(event.participant_limit));
+      if (event.confidence != null) addDetail(details, "Erkennungssicherheit", `${Math.round(event.confidence * 100)} %`);
+
+      card.append(heading, details);
+      const url = safeRegistrationUrl(event.registration_url);
+      if (url) {
+        const link = document.createElement("a");
+        link.className = "event-link";
+        link.href = url;
+        link.target = "_blank";
+        link.rel = "noopener noreferrer";
+        link.textContent = "Zur Anmeldung";
+        card.append(link);
+      }
+      return card;
+    }
+
+    function render() {
+      const events = snapshot.events || [];
+      const search = document.getElementById("search").value.trim().toLocaleLowerCase("de-DE");
+      const selectedStatus = document.getElementById("status-filter").value;
+      const visible = events.filter(event => {
+        const searchable = `${event.name || ""} ${event.sport || ""} ${event.location || ""}`.toLocaleLowerCase("de-DE");
+        return (!search || searchable.includes(search)) && (!selectedStatus || event.status === selectedStatus);
+      });
+
+      document.getElementById("total-count").textContent = events.length;
+      document.getElementById("open-count").textContent = events.filter(event => ["OPEN", "LIMITED"].includes(event.status)).length;
+      document.getElementById("scheduled-count").textContent = events.filter(event => ["SCHEDULED", "APPROXIMATE_DATE"].includes(event.status)).length;
+      document.getElementById("waitlist-count").textContent = events.filter(event => ["WAITLIST", "SOLD_OUT"].includes(event.status)).length;
+
+      const root = document.getElementById("events");
+      root.replaceChildren();
+      if (!visible.length) {
+        const empty = document.createElement("p");
+        empty.className = "empty";
+        empty.textContent = events.length ? "Keine passenden Events." : "Noch keine Events vorhanden.";
+        root.append(empty);
+      } else {
+        visible.forEach(event => root.append(renderEvent(event)));
+      }
+
+      const run = snapshot.last_run;
+      const runInfo = document.getElementById("run-info");
+      if (run) {
+        runInfo.textContent = `Letzter Lauf: ${formatDate(run.completed_at, true)} · ${run.checked} geprüft · ${run.failures} Fehler`;
+        if (run.url) {
+          const link = document.createElement("a");
+          link.href = run.url;
+          link.textContent = `Run #${run.number || "-"}`;
+          link.rel = "noopener noreferrer";
+          runInfo.append(" · ", link);
+        }
+      }
+    }
+
+    async function load() {
+      const url = new URL("status.json", window.location.href);
+      url.searchParams.set("_", Date.now());
+      try {
+        const response = await fetch(url, { cache: "no-store" });
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        snapshot = await response.json();
+        render();
+      } catch {
+        const root = document.getElementById("events");
+        root.replaceChildren();
+        const error = document.createElement("p");
+        error.className = "error";
+        error.textContent = "Der letzte Lauf ist noch nicht veröffentlicht oder die Daten sind nicht erreichbar.";
+        root.append(error);
+        document.getElementById("run-info").textContent = "Statusdaten momentan nicht verfügbar";
+      }
+    }
+
+    document.getElementById("search").addEventListener("input", render);
+    document.getElementById("status-filter").addEventListener("change", render);
+    document.getElementById("refresh").addEventListener("click", load);
+    load();
+    window.setInterval(load, 60000);
+  </script>
+</body>
+</html>

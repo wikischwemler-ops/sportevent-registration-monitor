@@ -15,5 +15,8 @@ Beim Start ergänzt der Worker `next_check_at` automatisch in bestehenden Postgr
 
 GitHub Actions bleibt der Hintergrund-Taktgeber. Geplante Workflows können mindestens alle 5 Minuten laufen, sind aber keine Echtzeitgarantie.
 
+## Dashboard im Browser
+Der Monitoring-Workflow veröffentlicht nach jedem Lauf eine responsive Statusseite über GitHub Pages. Die Daten werden nach dem Lauf aus PostgreSQL exportiert und als Pages-Artefakt bereitgestellt; sie werden nicht in den Git-Branch committet. Aktiviere unter **Settings > Pages** als Quelle **GitHub Actions**. Die Veröffentlichungs-URL und der letzte Lauf stehen anschließend im Workflow-Run. Die Seite kann je nach Repository-Einstellungen öffentlich sein.
+
 ## iPhone
 Normale APNs-Pushes werden als nächster Schritt angebunden. Kritische Alerts benötigen Apples spezielle Berechtigung.

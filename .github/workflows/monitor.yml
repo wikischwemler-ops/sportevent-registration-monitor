@@ -5,6 +5,8 @@ on:
     - cron: "*/5 * * * *"
 permissions:
   contents: read
+  pages: write
+  id-token: write
 concurrency:
   group: sportevent-monitor
   cancel-in-progress: false
@@ -12,6 +14,9 @@ jobs:
   monitor:
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
     steps:
       - uses: actions/checkout@v6
       - uses: actions/setup-python@v6
@@ -19,8 +24,10 @@ jobs:
           python-version: "3.12"
           cache: "pip"
       - run: pip install -r requirements.txt
+      - uses: actions/configure-pages@v5
       - name: Run monitoring agent
         env:
+          DASHBOARD_OUTPUT_DIR: ${{ runner.temp }}/sportevent-dashboard
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
           OPENAI_MODEL: ${{ secrets.OPENAI_MODEL }}
@@ -37,3 +44,11 @@ jobs:
           SMTP_FROM: ${{ secrets.SMTP_FROM }}
           NOTIFY_EMAIL_TO: ${{ secrets.NOTIFY_EMAIL_TO }}
         run: python worker.py
+      - name: Add dashboard page
+        run: cp dashboard/index.html "${RUNNER_TEMP}/sportevent-dashboard/index.html"
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: ${{ runner.temp }}/sportevent-dashboard
+      - name: Deploy latest dashboard
+        id: deployment
+        uses: actions/deploy-pages@v4

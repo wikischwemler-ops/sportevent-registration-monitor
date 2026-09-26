@@ -4,7 +4,7 @@
 !.env.example
 
 # Local task prompt and editor state.
-/req_prompt.txt
+req_prompt.txt
 .vscode/*
 !.vscode/extensions.json
 .idea/
