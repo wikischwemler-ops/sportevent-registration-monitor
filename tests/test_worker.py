@@ -1,7 +1,7 @@
 from datetime import date, datetime, timedelta, timezone
 from types import SimpleNamespace
 
-from worker import build_dashboard_snapshot
+from worker import build_dashboard_snapshot, load_events, process_events
 
 
 def test_snapshot_contains_latest_run_and_event_status():
@@ -53,3 +53,64 @@ def test_snapshot_counts_failed_checks():
 
     assert snapshot["last_run"]["failures"] == 1
     assert "private details" not in str(snapshot)
+
+
+def test_process_events_reuses_future_status_without_fetching():
+    now = datetime(2026, 9, 26, 12, tzinfo=timezone.utc)
+    future_check = now + timedelta(hours=1)
+    configured = [{
+        "id": 1,
+        "name": "City Run",
+        "official_url": "https://example.com",
+        "event_date": "2027-05-01",
+    }]
+    previous = {"events": [{
+        **configured[0],
+        "status": "SCHEDULED",
+        "next_check_at": future_check.isoformat(),
+    }]}
+
+    def unexpected_fetch(url):
+        raise AssertionError("A future event must not be fetched")
+
+    updated, results = process_events(configured, previous, now, fetch_page_fn=unexpected_fetch)
+
+    assert updated[0]["status"] == "SCHEDULED"
+    assert results == []
+
+
+def test_process_events_checks_due_event_and_schedules_next_check():
+    now = datetime(2026, 9, 26, 12, tzinfo=timezone.utc)
+    configured = [{
+        "id": 1,
+        "name": "City Run",
+        "official_url": "https://example.com",
+        "event_date": "2027-05-01",
+    }]
+
+    updated, results = process_events(
+        configured,
+        {"events": []},
+        now,
+        fetch_page_fn=lambda url: ("Registration is scheduled", "content-hash"),
+        analyze_fn=lambda text: {
+            "status": "SCHEDULED",
+            "registration_start": (now + timedelta(hours=12)).isoformat(),
+            "confidence": 0.9,
+            "evidence": text,
+        },
+    )
+
+    assert results == [{"id": 1, "name": "City Run", "status": "SCHEDULED", "ok": True}]
+    assert updated[0]["last_content_hash"] == "content-hash"
+    assert updated[0]["next_check_at"] == (now + timedelta(minutes=5)).isoformat()
+
+
+def test_load_events_requires_event_name_and_source(tmp_path):
+    events_file = tmp_path / "events.json"
+    events_file.write_text('[{"name":"No URL"}]', encoding="utf-8")
+
+    import pytest
+
+    with pytest.raises(ValueError, match="needs registration_url or official_url"):
+        load_events(events_file)

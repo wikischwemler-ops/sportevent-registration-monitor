@@ -1,0 +1,28 @@
+[
+	{
+		"id": 1,
+		"name": "Allgäu Triathlon",
+		"sport": "Triathlon",
+		"location": "Allgäu",
+		"event_date": "2027-08-22",
+		"official_url": "https://www.808project.de/allgaeutriathlon",
+		"priority": "high"
+	},
+	{
+		"id": 2,
+		"name": "adidas INFINITE TRAILS 2027",
+		"sport": "Trailrunning",
+		"location": "Gastein Valley",
+		"official_url": "https://infinite-trails.com/en/",
+		"registration_url": "https://infinite-trails.com/en/waitlist-2027/",
+		"priority": "high"
+	},
+	{
+		"id": 3,
+		"name": "IRONKIDS Zell am See-Kaprun",
+		"sport": "Aquathlon",
+		"location": "Strandbad Zell am See",
+		"official_url": "https://www.zellamsee-kaprun.com/de/events/ironman/ironkids",
+		"priority": "high"
+	}
+]

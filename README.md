@@ -9,14 +9,31 @@ Dashboard: `http://localhost:8000/`
 API-Doku: `http://localhost:8000/docs`
 
 ## Monitoring
-Der Worker startet alle 5 Minuten, prüft aber nur aktive Events, deren `next_check_at` erreicht ist. Neue Events ohne Prüfzeitpunkt werden beim nächsten Lauf geprüft. Danach wird der Zeitpunkt anhand des Eventdatums neu gesetzt: mehr als 6 Monate vorher wöchentlich, 3–6 Monate alle 3 Tage, 1–3 Monate täglich, unter 30 Tagen alle 2 Stunden. Eine bekannte Öffnung innerhalb von 48 Stunden sowie offene oder knapp werdende Anmeldungen werden alle 5 Minuten geprüft. Fehlgeschlagene Abrufe erhalten ebenfalls einen nächsten Prüfzeitpunkt.
+GitHub Actions startet alle 5 Minuten und lädt die Eventliste aus `events.json` im Projektstamm. Der Worker liest den zuletzt über GitHub Pages veröffentlichten `status.json`-Snapshot und prüft nur Events, deren `next_check_at` erreicht ist. Neue Events ohne vorherigen Status werden beim nächsten Lauf geprüft. Der nächste Prüfzeitpunkt folgt dem Eventdatum: mehr als 6 Monate vorher wöchentlich, 3–6 Monate alle 3 Tage, 1–3 Monate täglich, unter 30 Tagen alle 2 Stunden. Eine bekannte Öffnung innerhalb von 48 Stunden sowie offene oder knapp werdende Anmeldungen werden alle 5 Minuten geprüft.
 
-Beim Start ergänzt der Worker `next_check_at` automatisch in bestehenden PostgreSQL-Datenbanken.
+Events werden in `events.json` gepflegt. Beispiel:
+
+```json
+[
+	{
+		"id": 1,
+		"name": "Mein Laufevent",
+		"sport": "Laufen",
+		"location": "Berlin",
+		"event_date": "2027-05-01",
+		"official_url": "https://example.com/event",
+		"registration_url": "https://example.com/register",
+		"priority": "high"
+	}
+]
+```
+
+Die dauerhaften Laufdaten werden über Pages zwischen den GitHub-Actions-Läufen weitergereicht. PostgreSQL und ein `DATABASE_URL`-Secret sind für den Actions-Worker nicht erforderlich. Der Snapshot liegt nur im Pages-Deployment, nicht als Statusdatei im Git-Branch.
 
 GitHub Actions bleibt der Hintergrund-Taktgeber. Geplante Workflows können mindestens alle 5 Minuten laufen, sind aber keine Echtzeitgarantie.
 
 ## Dashboard im Browser
-Der Monitoring-Workflow veröffentlicht nach jedem Lauf eine responsive Statusseite über GitHub Pages. Die Daten werden nach dem Lauf aus PostgreSQL exportiert und als Pages-Artefakt bereitgestellt; sie werden nicht in den Git-Branch committet. Aktiviere unter **Settings > Pages** als Quelle **GitHub Actions**. Die Veröffentlichungs-URL und der letzte Lauf stehen anschließend im Workflow-Run. Die Seite kann je nach Repository-Einstellungen öffentlich sein.
+Der Monitoring-Workflow veröffentlicht nach jedem Lauf `dashboard/index.html` und `status.json` gemeinsam über GitHub Pages. Aktiviere unter **Settings > Pages** als Quelle **GitHub Actions**. Die Veröffentlichungs-URL und der letzte Lauf stehen anschließend im Workflow-Run. Da Pages-Statusdaten öffentlich abrufbar sein können, keine privaten Informationen in `events.json` eintragen.
 
 ## iPhone
 Normale APNs-Pushes werden als nächster Schritt angebunden. Kritische Alerts benötigen Apples spezielle Berechtigung.

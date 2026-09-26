@@ -25,10 +25,11 @@ jobs:
           cache: "pip"
       - run: pip install -r requirements.txt
       - uses: actions/configure-pages@v5
+        id: pages
       - name: Run monitoring agent
         env:
           DASHBOARD_OUTPUT_DIR: ${{ runner.temp }}/sportevent-dashboard
-          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          PAGES_URL: ${{ steps.pages.outputs.base_url }}
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
           OPENAI_MODEL: ${{ secrets.OPENAI_MODEL }}
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}

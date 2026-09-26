@@ -205,7 +205,7 @@
     let snapshot = { events: [], last_run: null };
 
     function formatDate(value, withTime = false) {
-      if (!value) return "Noch nicht bekannt";
+      if (!value) return "Termin steht noch aus";
       const options = withTime ? { dateStyle: "medium", timeStyle: "short" } : { dateStyle: "medium" };
       return new Intl.DateTimeFormat("de-DE", options).format(new Date(value));
     }
