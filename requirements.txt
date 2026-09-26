@@ -1,0 +1,13 @@
+fastapi>=0.116,<1
+uvicorn[standard]>=0.35,<1
+sqlalchemy>=2.0,<3
+psycopg[binary]>=3.2,<4
+pydantic>=2.11,<3
+pydantic-settings>=2.10,<3
+httpx>=0.28,<1
+beautifulsoup4>=4.13,<5
+python-dateutil>=2.9,<3
+openai>=1.99,<2
+twilio>=9.7,<10
+pytest>=8.4,<9
+ruff>=0.12,<1
