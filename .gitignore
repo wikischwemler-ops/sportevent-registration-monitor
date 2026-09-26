@@ -1,7 +1,45 @@
+# Local secrets and environment overrides; keep the safe template tracked.
 .env
+.env.*
+!.env.example
+
+# Local task prompt and editor state.
+/req_prompt.txt
+.vscode/*
+!.vscode/extensions.json
+.idea/
+
+# Python environments, bytecode, and test/lint caches.
 .venv/
+venv/
 __pycache__/
 .pytest_cache/
 .ruff_cache/
+.mypy_cache/
+.tox/
+.nox/
 *.py[cod]
+
+# Test coverage and build artifacts.
+.coverage
+.coverage.*
+htmlcov/
+build/
+dist/
+*.egg-info/
+
+# Local databases, runtime data, and logs.
+/data/
+*.db
+*.sqlite
+*.sqlite3
+*.log
+/logs/
+
+# Operating-system and editor temporary files.
 .DS_Store
+Thumbs.db
+Desktop.ini
+*.swp
+*.swo
+*~

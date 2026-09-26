@@ -1,6 +1,9 @@
 from datetime import date, datetime
-from pydantic import BaseModel, HttpUrl, ConfigDict
+
+from pydantic import BaseModel, ConfigDict, HttpUrl
+
 from .models import EventStatus, Priority
+
 
 class EventCreate(BaseModel):
     name: str

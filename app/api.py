@@ -1,5 +1,6 @@
 from fastapi import APIRouter, Depends
 from sqlalchemy import select
+
 from .db import SessionLocal
 from .models import Event
 from .scheduler import recommended_interval_minutes
@@ -21,5 +22,6 @@ def dashboard(db=Depends(db_session)):
         "registration_start": e.registration_start.isoformat() if e.registration_start else None,
         "registration_url": e.registration_url, "confidence": e.confidence,
         "next_check_interval_minutes": recommended_interval_minutes(e),
+        "next_check_at": e.next_check_at.isoformat() if e.next_check_at else None,
         "last_checked_at": e.last_checked_at.isoformat() if e.last_checked_at else None
     } for e in events]}

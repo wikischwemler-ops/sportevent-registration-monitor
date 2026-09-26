@@ -1,10 +1,13 @@
-from datetime import datetime, timezone
-from sqlalchemy import select
-from .db import SessionLocal
-from .models import Event, Observation, NotificationLog, EventStatus
-from .fetcher import fetch_page
+from datetime import datetime, timedelta, timezone
+
+from sqlalchemy import or_, select
+
 from .analyzer import analyze
-from .notifications import send_telegram, send_sms, send_email
+from .db import SessionLocal
+from .fetcher import fetch_page
+from .models import Event, EventStatus, NotificationLog, Observation
+from .notifications import send_email, send_sms, send_telegram
+from .scheduler import recommended_interval_minutes
 
 IMPORTANT_TRANSITIONS = {
     (EventStatus.NOT_OPEN.value, EventStatus.OPEN.value),
@@ -49,8 +52,12 @@ def notify(event: Event, old: str, new: str, observation: dict):
         db.commit()
 
 def monitor_all() -> dict:
+    now = datetime.now(timezone.utc)
     with SessionLocal() as db:
-        events = list(db.scalars(select(Event).where(Event.active.is_(True))))
+        events = list(db.scalars(select(Event).where(
+            Event.active.is_(True),
+            or_(Event.next_check_at.is_(None), Event.next_check_at <= now),
+        )))
     results = []
     for event in events:
         try:
@@ -66,7 +73,11 @@ def monitor_all() -> dict:
                 current.approximate_registration_text = observation.get("approximate_registration_text")
                 current.participant_limit = observation.get("participant_limit")
                 current.confidence = observation.get("confidence")
-                current.last_checked_at = datetime.now(timezone.utc)
+                checked_at = datetime.now(timezone.utc)
+                current.last_checked_at = checked_at
+                current.next_check_at = checked_at + timedelta(
+                    minutes=recommended_interval_minutes(current, checked_at)
+                )
                 current.last_content_hash = content_hash
                 db.add(Observation(
                     event_id=event.id,
@@ -81,6 +92,15 @@ def monitor_all() -> dict:
                 notify(event, old_status, new_status, observation)
             results.append({"id": event.id, "status": new_status, "ok": True})
         except Exception as exc:
+            with SessionLocal() as db:
+                current = db.get(Event, event.id)
+                if current:
+                    checked_at = datetime.now(timezone.utc)
+                    current.last_checked_at = checked_at
+                    current.next_check_at = checked_at + timedelta(
+                        minutes=recommended_interval_minutes(current, checked_at)
+                    )
+                    db.commit()
             results.append({"id": event.id, "ok": False, "error": str(exc)})
     return {"events": len(events), "results": results}
 

@@ -1,5 +1,6 @@
 from fastapi import APIRouter
 from fastapi.responses import HTMLResponse
+
 router = APIRouter()
 HTML = '''<!doctype html><html lang="de"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>SportEvent Monitor</title>
 <style>body{font-family:system-ui;margin:0;background:#f5f7fa;color:#172033}header{background:#172033;color:white;padding:24px}main{max-width:1200px;margin:24px auto;padding:0 16px}.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:16px}.card{background:white;border-radius:14px;padding:18px;box-shadow:0 2px 12px #0001}.badge{padding:5px 9px;border-radius:99px;background:#eef2f7;font-size:12px}a{color:#2457d6}</style></head>

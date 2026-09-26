@@ -1,14 +1,17 @@
 import json
 import re
-from datetime import datetime, timezone
+from datetime import timezone
+
 from dateutil import parser as dateparser
+
 from .config import settings
 from .models import EventStatus
+
 
 def heuristic_analyze(text: str) -> dict:
     lower = text.lower()
 
-    if any(x in lower for x in ["registration is open", "registration now open", "anmeldung geöffnet", "anmeldung ist geöffnet", "anmeldung offen"]):
+    if any(x in lower for x in ["registration is open", "registration now open", "registration is now open", "anmeldung geöffnet", "anmeldung ist geöffnet", "anmeldung offen"]):
         status = EventStatus.OPEN.value
     elif any(x in lower for x in ["sold out", "ausverkauft", "fully booked", "keine plätze"]):
         status = EventStatus.SOLD_OUT.value

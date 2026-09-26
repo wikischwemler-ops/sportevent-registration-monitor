@@ -1,7 +1,10 @@
 import hashlib
+
 import httpx
 from bs4 import BeautifulSoup
+
 from .config import settings
+
 
 def fetch_page(url: str) -> tuple[str, str]:
     headers = {"User-Agent": settings.user_agent}

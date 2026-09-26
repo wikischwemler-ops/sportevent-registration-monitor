@@ -1,7 +1,10 @@
 import smtplib
 from email.message import EmailMessage
+
 import httpx
+
 from .config import settings
+
 
 def send_telegram(message: str) -> tuple[bool, str | None]:
     if not settings.telegram_bot_token or not settings.telegram_chat_id:

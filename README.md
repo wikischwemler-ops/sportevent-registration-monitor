@@ -9,7 +9,9 @@ Dashboard: `http://localhost:8000/`
 API-Doku: `http://localhost:8000/docs`
 
 ## Monitoring
->90 Tage: wöchentlich; 30–90 Tage: täglich; <30 Tage: alle 2 Stunden; bekannte Anmeldung <48h: 5 Minuten; offene Anmeldung: 5 Minuten.
+Der Worker startet alle 5 Minuten, prüft aber nur aktive Events, deren `next_check_at` erreicht ist. Neue Events ohne Prüfzeitpunkt werden beim nächsten Lauf geprüft. Danach wird der Zeitpunkt anhand des Eventdatums neu gesetzt: mehr als 6 Monate vorher wöchentlich, 3–6 Monate alle 3 Tage, 1–3 Monate täglich, unter 30 Tagen alle 2 Stunden. Eine bekannte Öffnung innerhalb von 48 Stunden sowie offene oder knapp werdende Anmeldungen werden alle 5 Minuten geprüft. Fehlgeschlagene Abrufe erhalten ebenfalls einen nächsten Prüfzeitpunkt.
+
+Beim Start ergänzt der Worker `next_check_at` automatisch in bestehenden PostgreSQL-Datenbanken.
 
 GitHub Actions bleibt der Hintergrund-Taktgeber. Geplante Workflows können mindestens alle 5 Minuten laufen, sind aber keine Echtzeitgarantie.
 

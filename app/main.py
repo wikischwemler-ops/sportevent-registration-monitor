@@ -1,11 +1,12 @@
-from fastapi import FastAPI, Depends, HTTPException
-from sqlalchemy.orm import Session
+from fastapi import Depends, FastAPI, HTTPException
 from sqlalchemy import select
-from .db import init_db, SessionLocal
-from .models import Event
-from .schemas import EventCreate, EventRead
-from .monitor import monitor_all
+from sqlalchemy.orm import Session
+
 from .api import router as api_router
+from .db import SessionLocal, init_db
+from .models import Event
+from .monitor import monitor_all
+from .schemas import EventCreate, EventRead
 from .web import router as web_router
 
 app=FastAPI(title="SportEvent Registration Monitor",version="0.2.0")

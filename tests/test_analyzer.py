@@ -1,6 +1,7 @@
 from app.analyzer import heuristic_analyze
 from app.models import EventStatus
 
+
 def test_open():
     result = heuristic_analyze("Registration is now open. Register here.")
     assert result["status"] == EventStatus.OPEN.value

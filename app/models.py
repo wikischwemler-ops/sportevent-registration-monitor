@@ -1,8 +1,11 @@
-from datetime import datetime, date, timezone
+from datetime import date, datetime, timezone
 from enum import Enum
-from sqlalchemy import Date, DateTime, Float, Integer, String, Text, Boolean
+
+from sqlalchemy import Boolean, Date, DateTime, Float, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column
+
 from .db import Base
+
 
 class EventStatus(str, Enum):
     ANNOUNCED = "ANNOUNCED"
@@ -42,6 +45,7 @@ class Event(Base):
     participant_limit: Mapped[int | None] = mapped_column(Integer)
     confidence: Mapped[float | None] = mapped_column(Float)
     last_checked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    next_check_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), index=True)
     last_content_hash: Mapped[str | None] = mapped_column(String(64))
     active: Mapped[bool] = mapped_column(Boolean, default=True)
 

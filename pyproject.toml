@@ -1,0 +1,6 @@
+[tool.ruff.lint.flake8-bugbear]
+extend-immutable-calls = ["fastapi.Depends"]
+
+[tool.ruff.lint.per-file-ignores]
+"app/monitor.py" = ["BLE001"]
+"app/notifications.py" = ["BLE001"]
