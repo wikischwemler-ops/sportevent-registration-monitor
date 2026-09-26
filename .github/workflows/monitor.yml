@@ -49,7 +49,10 @@ jobs:
         run: cp dashboard/index.html "${RUNNER_TEMP}/sportevent-dashboard/index.html"
       - uses: actions/upload-pages-artifact@v3
         with:
+          name: github-pages-${{ github.run_attempt }}
           path: ${{ runner.temp }}/sportevent-dashboard
       - name: Deploy latest dashboard
         id: deployment
         uses: actions/deploy-pages@v4
+        with:
+          artifact_name: github-pages-${{ github.run_attempt }}
