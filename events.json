@@ -48,5 +48,41 @@
 		"location": "Hardtsee, Kraichgau",
 		"official_url": "https://www.ironman.com/races/im703-kraichgau/ironkids",
 		"priority": "high"
+	},
+	{
+		"id": 7,
+		"name": "IRONMAN Kalmar",
+		"sport": "Triathlon",
+		"location": "Kalmar, Sweden",
+		"event_date": "2027-08-21",
+		"official_url": "https://www.ironman.com/races/im-kalmar",
+		"priority": "high"
+	},
+	{
+		"id": 8,
+		"name": "IRONMAN Copenhagen",
+		"sport": "Triathlon",
+		"location": "Copenhagen, Denmark",
+		"event_date": "2027-08-22",
+		"official_url": "https://www.ironman.com/races/im-copenhagen",
+		"priority": "high"
+	},
+	{
+		"id": 9,
+		"name": "IRONMAN 70.3 Elsinore",
+		"sport": "Triathlon",
+		"location": "Elsinore, Denmark",
+		"event_date": "2027-06-27",
+		"official_url": "https://www.ironman.com/races/im703-elsinore",
+		"priority": "high"
+	},
+	{
+		"id": 10,
+		"name": "IRONMAN 70.3 Jönköping",
+		"sport": "Triathlon",
+		"location": "Jönköping, Sweden",
+		"event_date": "2027-07-11",
+		"official_url": "https://www.ironman.com/races/im703-jonkoping",
+		"priority": "high"
 	}
 ]
