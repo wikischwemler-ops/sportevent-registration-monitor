@@ -24,5 +24,29 @@
 		"location": "Strandbad Zell am See",
 		"official_url": "https://www.zellamsee-kaprun.com/de/events/ironman/ironkids",
 		"priority": "high"
+	},
+	{
+		"id": 4,
+		"name": "IRONKIDS Switzerland",
+		"sport": "Laufen",
+		"location": "Rapperswil",
+		"official_url": "https://www.ironman.com/races/im703-switzerland/ironkids",
+		"priority": "high"
+	},
+	{
+		"id": 5,
+		"name": "IRONKIDS Luxembourg",
+		"sport": "Aquathlon",
+		"location": "Remich",
+		"official_url": "https://www.ironman.com/races/im703-luxembourg/ironkids",
+		"priority": "high"
+	},
+	{
+		"id": 6,
+		"name": "IRONKIDS Kraichgau",
+		"sport": "Triathlon",
+		"location": "Hardtsee, Kraichgau",
+		"official_url": "https://www.ironman.com/races/im703-kraichgau/ironkids",
+		"priority": "high"
 	}
 ]

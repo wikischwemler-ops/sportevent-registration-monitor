@@ -110,7 +110,10 @@
     .event h2 { margin: 0; font-size: 17px; line-height: 1.3; overflow-wrap: anywhere; }
     .event-subtitle { margin: 5px 0 0; color: var(--muted); font-size: 13px; }
     .status {
+      display: inline-flex;
       flex: 0 0 auto;
+      align-items: center;
+      gap: 6px;
       padding: 4px 8px;
       border-radius: 4px;
       background: var(--gray-soft);
@@ -119,10 +122,36 @@
       font-weight: 750;
     }
 
-    .status-open, .status-limited { background: var(--green-soft); color: #145b40; }
+    .status::before {
+      width: 8px;
+      height: 8px;
+      flex: 0 0 8px;
+      border-radius: 50%;
+      background: currentColor;
+      content: "";
+    }
+
+    .status-open { background: var(--green-soft); color: #145b40; }
+    .status-limited, .status-waitlist { background: var(--amber-soft); color: var(--amber); }
     .status-scheduled, .status-approximate_date { background: var(--blue-soft); color: #214e72; }
-    .status-waitlist { background: var(--amber-soft); color: var(--amber); }
-    .status-sold_out, .status-cancelled { background: var(--red-soft); color: var(--red); }
+    .status-sold_out, .status-closed, .status-cancelled { background: var(--red-soft); color: var(--red); }
+    .status-announced, .status-not_open, .status-unknown { background: var(--gray-soft); color: #43534c; }
+    .status-legend {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px 20px;
+      margin: -8px 0 20px;
+      padding-bottom: 16px;
+      border-bottom: 1px solid var(--line);
+    }
+
+    .legend-item { display: inline-flex; align-items: center; gap: 7px; color: var(--muted); font-size: 12px; }
+    .legend-dot { width: 9px; height: 9px; flex: 0 0 9px; border-radius: 50%; }
+    .legend-open { background: var(--green); }
+    .legend-warning { background: #b27600; }
+    .legend-closed { background: var(--red); }
+    .legend-info { background: var(--blue); }
+    .legend-neutral { background: #75827b; }
     .details {
       display: grid;
       grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -134,7 +163,8 @@
 
     .detail-label { display: block; color: var(--muted); font-size: 11px; }
     .detail-value { display: block; margin-top: 3px; font-size: 13px; overflow-wrap: anywhere; }
-    .event-link { display: inline-block; margin-top: 14px; color: #176a50; font-size: 13px; font-weight: 700; }
+    .event-links { display: flex; flex-wrap: wrap; gap: 8px 18px; margin-top: 14px; }
+    .event-link { color: #176a50; font-size: 13px; font-weight: 700; }
     .empty, .error { grid-column: 1 / -1; padding: 28px 12px; color: var(--muted); text-align: center; }
     .error { color: var(--red); }
     footer { padding-bottom: 24px; color: var(--muted); font-size: 12px; }
@@ -176,6 +206,13 @@
       <div class="metric"><span class="metric-label">Termin bekannt</span><span class="metric-value" id="scheduled-count">-</span></div>
       <div class="metric"><span class="metric-label">Warteliste / ausverkauft</span><span class="metric-value" id="waitlist-count">-</span></div>
     </section>
+    <section class="status-legend" aria-label="Legende der Statusfarben">
+      <span class="legend-item"><span class="legend-dot legend-open"></span>Anmeldung offen</span>
+      <span class="legend-item"><span class="legend-dot legend-warning"></span>Begrenzte Plätze / Warteliste</span>
+      <span class="legend-item"><span class="legend-dot legend-closed"></span>Geschlossen / ausverkauft / abgesagt</span>
+      <span class="legend-item"><span class="legend-dot legend-info"></span>Termin bekannt</span>
+      <span class="legend-item"><span class="legend-dot legend-neutral"></span>Noch nicht offen / unbekannt</span>
+    </section>
     <section class="toolbar" aria-label="Events filtern">
       <input id="search" type="search" placeholder="Event suchen" aria-label="Event suchen">
       <select id="status-filter" aria-label="Nach Status filtern">
@@ -195,7 +232,7 @@
     </section>
     <section class="events" id="events" aria-live="polite"></section>
   </main>
-  <footer>Die Seite zeigt den letzten Datenstand aus PostgreSQL.</footer>
+  <footer>Die Seite zeigt den Status des letzten GitHub-Actions-Laufs.</footer>
   <script>
     const labels = {
       ANNOUNCED: "Angekündigt", NOT_OPEN: "Noch nicht offen", APPROXIMATE_DATE: "Ungefährer Termin",
@@ -222,7 +259,7 @@
       parent.append(wrapper);
     }
 
-    function safeRegistrationUrl(value) {
+    function safeHttpUrl(value) {
       if (!value) return null;
       try {
         const url = new URL(value);
@@ -265,16 +302,26 @@
       if (event.confidence != null) addDetail(details, "Erkennungssicherheit", `${Math.round(event.confidence * 100)} %`);
 
       card.append(heading, details);
-      const url = safeRegistrationUrl(event.registration_url);
-      if (url) {
+      const links = document.createElement("div");
+      links.className = "event-links";
+      const eventLinks = [
+        ["Veranstalterseite", event.official_url],
+        ["Zur Anmeldung", event.registration_url],
+      ];
+      const seenUrls = new Set();
+      for (const [label, value] of eventLinks) {
+        const url = safeHttpUrl(value);
+        if (!url || seenUrls.has(url)) continue;
+        seenUrls.add(url);
         const link = document.createElement("a");
         link.className = "event-link";
         link.href = url;
         link.target = "_blank";
         link.rel = "noopener noreferrer";
-        link.textContent = "Zur Anmeldung";
-        card.append(link);
+        link.textContent = label;
+        links.append(link);
       }
+      if (links.childElementCount) card.append(links);
       return card;
     }
 
