@@ -20,6 +20,6 @@ class Settings(BaseSettings):
     request_timeout_seconds: int = 30
     user_agent: str = "SportEventRegistrationMonitor/1.0"
 
-    model_config = SettingsConfigDict(env_file=".env", extra="ignore")
+    model_config = SettingsConfigDict(env_file=".env", env_ignore_empty=True, extra="ignore")
 
 settings = Settings()
