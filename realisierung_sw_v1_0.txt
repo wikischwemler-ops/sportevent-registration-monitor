@@ -31,6 +31,7 @@ Eine PostgreSQL-Migration ist für die aktuelle Arbeitsphase nicht erforderlich.
 
 ### Workflow und Persistenz
 
+- Der geplante GitHub-Actions-Job läuft ungefähr alle 30 Minuten.
 - `events.json` enthält die überwachten Events.
 - Der Worker lädt den vorherigen `status.json`-Snapshot.
 - Der Worker verarbeitet nur Events, deren `next_check_at` erreicht ist.

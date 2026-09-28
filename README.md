@@ -9,7 +9,7 @@ Dashboard: `http://localhost:8000/`
 API-Doku: `http://localhost:8000/docs`
 
 ## Monitoring
-GitHub Actions startet alle 5 Minuten und lädt die Eventliste aus `events.json` im Projektstamm. Der Worker liest den zuletzt über GitHub Pages veröffentlichten `status.json`-Snapshot und prüft nur Events, deren `next_check_at` erreicht ist. Neue Events ohne vorherigen Status werden beim nächsten Lauf geprüft. Der nächste Prüfzeitpunkt folgt dem Eventdatum: mehr als 6 Monate vorher wöchentlich, 3–6 Monate alle 3 Tage, 1–3 Monate täglich, unter 30 Tagen alle 2 Stunden. Eine bekannte Öffnung innerhalb von 48 Stunden sowie offene oder knapp werdende Anmeldungen werden alle 5 Minuten geprüft.
+GitHub Actions startet alle 30 Minuten und lädt die Eventliste aus `events.json` im Projektstamm. Der Worker liest den zuletzt über GitHub Pages veröffentlichten `status.json`-Snapshot und prüft nur Events, deren `next_check_at` erreicht ist. Neue Events ohne vorherigen Status werden beim nächsten Lauf geprüft. Der nächste Prüfzeitpunkt folgt dem Eventdatum: mehr als 6 Monate vorher wöchentlich, 3–6 Monate alle 3 Tage, 1–3 Monate täglich, unter 30 Tagen alle 2 Stunden. Eine bekannte Öffnung innerhalb von 48 Stunden sowie offene oder knapp werdende Anmeldungen werden beim nächsten verfügbaren 30-Minuten-Lauf geprüft.
 
 Events werden in `events.json` gepflegt. Beispiel:
 
@@ -30,7 +30,7 @@ Events werden in `events.json` gepflegt. Beispiel:
 
 Die dauerhaften Laufdaten werden über Pages zwischen den GitHub-Actions-Läufen weitergereicht. PostgreSQL und ein `DATABASE_URL`-Secret sind für den Actions-Worker nicht erforderlich. Der Snapshot liegt nur im Pages-Deployment, nicht als Statusdatei im Git-Branch.
 
-GitHub Actions bleibt der Hintergrund-Taktgeber. Geplante Workflows können mindestens alle 5 Minuten laufen, sind aber keine Echtzeitgarantie.
+GitHub Actions bleibt der Hintergrund-Taktgeber. Der geplante Workflow läuft ungefähr alle 30 Minuten, ist aber keine Echtzeitgarantie.
 
 ## Dashboard im Browser
 Der Monitoring-Workflow veröffentlicht nach jedem Lauf `dashboard/index.html` und `status.json` gemeinsam über GitHub Pages. Aktiviere unter **Settings > Pages** als Quelle **GitHub Actions**. Die Veröffentlichungs-URL und der letzte Lauf stehen anschließend im Workflow-Run. Da Pages-Statusdaten öffentlich abrufbar sein können, keine privaten Informationen in `events.json` eintragen.

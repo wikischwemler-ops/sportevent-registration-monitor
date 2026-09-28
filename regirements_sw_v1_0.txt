@@ -188,7 +188,7 @@ GitHub Actions startet den Worker regelmäßig.
 Aktuell beispielsweise ungefähr:
 
 ```text
-alle 5 Minuten
+alle 30 Minuten
 ```
 
 Der Worker soll aber nicht jedes Event bei jedem Lauf erneut prüfen.
@@ -700,7 +700,7 @@ Auch ungewöhnliche Statusänderungen müssen verarbeitet werden, ohne dass der 
 
 # 16. Deduplizierung von Alarmen
 
-Der Worker läuft möglicherweise alle 5 Minuten.
+Der Worker läuft möglicherweise alle 30 Minuten.
 
 Deshalb darf bei folgendem Zustand:
 
@@ -708,7 +708,7 @@ Deshalb darf bei folgendem Zustand:
 OPEN
 ```
 
-nicht alle 5 Minuten erneut dieselbe Nachricht versendet werden.
+nicht alle 30 Minuten erneut dieselbe Nachricht versendet werden.
 
 Es muss zwischen:
 
@@ -896,13 +896,13 @@ Grundidee:
 → alle 2 Stunden
 
 Registrierung innerhalb 48 Stunden
-→ alle 5 Minuten
+→ beim nächsten 30-Minuten-Lauf
 
 OPEN oder LIMITED
-→ alle 5 Minuten
+→ beim nächsten 30-Minuten-Lauf
 ```
 
-GitHub Actions kann technisch beispielsweise alle 5 Minuten laufen.
+GitHub Actions läuft in dieser Arbeitsphase technisch ungefähr alle 30 Minuten.
 
 Aber:
 
