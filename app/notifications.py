@@ -20,10 +20,10 @@ def send_telegram(message: str) -> tuple[bool, str | None]:
             },
             timeout=settings.request_timeout_seconds,
         )
-        r.raise_for_status()
         payload = r.json()
         if not payload.get("ok"):
             return False, payload.get("description", "Telegram API Fehler")
+        r.raise_for_status()
         return True, None
     except Exception as exc:
         return False, str(exc)

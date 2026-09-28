@@ -32,6 +32,25 @@ def test_telegram_api_error_is_reported(monkeypatch):
     assert notifications.send_telegram("Alarm") == (False, "Bad Request")
 
 
+def test_telegram_http_error_reports_api_description(monkeypatch):
+    monkeypatch.setattr(settings, "telegram_bot_token", "token")
+    monkeypatch.setattr(settings, "telegram_chat_id", "chat")
+    monkeypatch.setattr(
+        notifications.httpx,
+        "post",
+        lambda *args, **kwargs: FakeResponse({
+            "ok": False,
+            "error_code": 403,
+            "description": "Forbidden: bot was blocked by the user",
+        }),
+    )
+
+    assert notifications.send_telegram("Alarm") == (
+        False,
+        "Forbidden: bot was blocked by the user",
+    )
+
+
 def test_telegram_success_uses_expected_payload(monkeypatch):
     monkeypatch.setattr(settings, "telegram_bot_token", "token")
     monkeypatch.setattr(settings, "telegram_chat_id", "chat")
