@@ -1,0 +1,270 @@
+# SportEvent Registration Monitor - Realisierungsstatus v1.0
+
+Stand: 2026-09-28
+Grundlage: Code- und Dokumentationsprüfung des bestehenden Repositorys
+Anforderungsgrundlage: `regirements_sw_v1_0.txt`
+
+## 1. Gesamtbewertung
+
+Das Projekt ist als MVP funktionsfähig, aber noch nicht vollständig produktionsfertig.
+
+Die aktuelle Architektur mit:
+
+```text
+GitHub Actions
+-> events.json
+-> status.json über GitHub Pages
+-> fällige Events
+-> Webseitenabruf
+-> Analyse
+-> Statusvergleich
+-> Benachrichtigungen
+-> next_check_at
+-> status.json
+```
+
+ist grundsätzlich realisierbar und soll zunächst erhalten bleiben.
+
+Eine PostgreSQL-Migration ist für die aktuelle Arbeitsphase nicht erforderlich.
+
+## 2. Aktuell implementiert
+
+### Workflow und Persistenz
+
+- `events.json` enthält die überwachten Events.
+- Der Worker lädt den vorherigen `status.json`-Snapshot.
+- Der Worker verarbeitet nur Events, deren `next_check_at` erreicht ist.
+- Der Worker erzeugt einen neuen Snapshot für GitHub Pages.
+- Das Dashboard und `status.json` werden gemeinsam veröffentlicht.
+- Neue Events ohne bisherigen Status können verarbeitet werden.
+
+### Monitoring und Scheduler
+
+- Dynamische Prüfintervalle sind vorhanden.
+- `OPEN` und `LIMITED` werden engmaschiger geprüft.
+- Eine bekannte Registrierung innerhalb von 48 Stunden wird engmaschiger geprüft.
+- Fehler beim Abruf eines Events verhindern nicht grundsätzlich die Verarbeitung der übrigen Events.
+
+### Analyse
+
+- Die Statuswerte sind im Modell definiert:
+
+```text
+ANNOUNCED
+NOT_OPEN
+APPROXIMATE_DATE
+SCHEDULED
+OPEN
+LIMITED
+WAITLIST
+SOLD_OUT
+CLOSED
+CANCELLED
+UNKNOWN
+```
+
+- OpenAI kann ein strukturiertes JSON-Ergebnis liefern.
+- `status`, `registration_start`, `registration_end`, `confidence`, `evidence` und weitere Felder sind vorgesehen.
+- Der OpenAI-Systemprompt fordert Faktenorientierung und Schutz vor erfundenen Registrierungsdaten.
+- Ohne OpenAI-Schlüssel gibt es eine heuristische Fallback-Analyse.
+- Ungefähre Registrierungsangaben werden heuristisch als `APPROXIMATE_DATE` erkannt.
+- Der Analysepipeline kann der Event-Kontext übergeben werden.
+- Ein konkretes Registrierungsdatum mit abweichendem Event-Jahr wird als `UNKNOWN` verworfen.
+
+### Benachrichtigungssender
+
+Grundlegende Sender sind vorhanden für:
+
+- Telegram
+- SMS über Twilio
+- E-Mail über SMTP
+
+Eine einfache Benachrichtigung bei einigen Statusübergängen ist vorhanden.
+
+### Qualitätssicherung
+
+- Ein `PYTHONPATH`-Fix für GitHub Actions ist vorhanden.
+- Tests für grundlegende Analyse-, Monitoring- und Scheduler-Funktionen sind vorhanden.
+- `ruff check .` ist im Test-Workflow vorgesehen.
+
+## 3. Teilweise implementiert
+
+### Statusanalyse
+
+Einige Statuswerte werden erkannt, aber die Analyse ist noch nicht vollständig zuverlässig.
+
+Offene Einschränkungen:
+
+- `CLOSED`, `CANCELLED`, `LIMITED` und `UNKNOWN` benötigen noch zusätzliche Tests und breitere Textvarianten.
+- Die Heuristik erkennt nur begrenzte Textvarianten.
+
+### Event-Jahr
+
+Der Analysefunktion kann inzwischen der vollständige Event-Kontext übergeben werden. Die Prüfung ist jedoch noch nicht für alle OpenAI- und Quellenvarianten getestet:
+
+- Event-Jahr
+- Event-Datum
+- Event-Name
+- URL
+- Registrierungsjahr
+
+Daher ist die Prüfung alter Veranstaltungsseiten noch nicht ausreichend abgesichert.
+
+### Evidence und Quellen
+
+Evidence und Confidence werden teilweise gespeichert. Die Felder `source_url` und `observed_at` müssen jedoch im gesamten Worker-Pfad einheitlich und nachweisbar gepflegt werden.
+
+### Benachrichtigungen
+
+Die vorhandenen Sender funktionieren grundsätzlich, aber das vollständige Alarmkonzept ist noch nicht umgesetzt.
+
+Bereits vorhanden:
+
+- relevante Statusübergänge einschließlich `CLOSED`, `CANCELLED` und `WAITLIST -> SOLD_OUT`
+- Nachricht mit Eventdatum, Registrierungsbeginn, Quelle und Evidence
+- Alarmhistorie und Content-Hash-Deduplizierung im `status.json`-Workerpfad
+- Kanalzustände `NOT_CONFIGURED`, `SENT` und `FAILED`
+- Telegram-API-Fehler werden trotz HTTP-Erfolg erkannt.
+- Telegram-Nachrichten werden auf die API-Maximallänge begrenzt.
+
+Noch unvollständig:
+
+- begrenzte Retry-Strategie
+- vollständige automatisierte Tests aller Alarmübergänge
+
+## 4. Noch nicht vollständig implementiert
+
+### Alarm- und Benachrichtigungsprotokoll
+
+Der Worker besitzt ein Alarmprotokoll pro:
+
+```text
+event_id
+transition_key
+channel
+message_type
+attempted_at
+success
+error
+```
+
+Das Protokoll wird im jeweiligen Event innerhalb von `status.json` gespeichert. Der vollständige Nachrichtentext wird nicht gespeichert. Eine Prüfung auf vertrauliche Evidence sowie eine begrenzte Retry-Strategie sind noch offen.
+
+### Robuste Deduplizierung
+
+Die Deduplizierung verwendet inzwischen einen Hash aus:
+
+```text
+event_id + old_status + new_status + content_hash
+```
+
+Ein unveränderter Seiteninhalt erzeugt damit keinen weiteren Alarm. Eine neue Beobachtung mit verändertem Content-Hash kann erneut alarmieren. Retries für fehlgeschlagene konfigurierte Kanäle sind noch offen.
+
+### Vollständige Statusübergänge
+
+Mindestens folgende Fälle müssen umgesetzt und getestet werden:
+
+```text
+NOT_OPEN -> SCHEDULED
+SCHEDULED -> OPEN
+OPEN -> LIMITED
+LIMITED -> WAITLIST
+WAITLIST -> SOLD_OUT
+OPEN -> CLOSED
+beliebiger Status -> CANCELLED
+```
+
+Ungewöhnliche Übergänge dürfen den Worker nicht zum Absturz bringen.
+
+### Quellenpriorität
+
+Die zentrale Quellenauflösung bevorzugt bereits Veranstalterseite vor Registrierungsportal und weiteren Quellen. Optionale `sources`-Einträge werden unterstützt. Eine echte Auswertung und Zusammenführung widersprüchlicher Mehrfachquellen ist noch offen.
+
+### APNs
+
+Apple Push Notifications sind als spätere Erweiterung vorgesehen und nicht als produktiv umgesetzt zu betrachten.
+
+## 5. Priorisierte nächste Schritte
+
+1. Benachrichtigungsfunktionen und Worker-Pfad mit einer verfügbaren Python-Umgebung testen.
+2. Retry-Strategie für fehlgeschlagene konfigurierte Kanäle ergänzen.
+3. Alle Statusvarianten und Alarmübergänge breiter testen.
+4. `source_url` und `observed_at` in allen Pfaden nachweisen.
+5. Mehrere widersprüchliche Quellen auswerten und priorisiert zusammenführen.
+6. README nach der Umsetzung erneut mit dem tatsächlichen Stand abgleichen.
+
+## 6. Erforderliche Tests
+
+### Analyse
+
+- `OPEN`
+- `LIMITED`
+- `WAITLIST`
+- `SOLD_OUT`
+- `CLOSED`
+- `CANCELLED`
+- `UNKNOWN`
+- ungefähre Angabe wie `Registration opens in January.`
+- konkretes Datum mit Uhrzeit und Zeitzone
+- altes Event-Jahr darf nicht für das überwachte Event übernommen werden
+- keine erfundenen konkreten Daten
+
+### Benachrichtigungen
+
+- jeder relevante Statuswechsel erzeugt höchstens einen Alarm pro belegter Beobachtung
+- unveränderter Status erzeugt keinen neuen Alarm
+- wiederholte echte Änderungen können erneut alarmieren
+- nicht konfigurierte Kanäle sind kein Monitoringfehler
+- Fehler eines Kanals stoppen nicht den gesamten Lauf
+- `CANCELLED` erzeugt unabhängig vom vorherigen Status eine wichtige Meldung
+- Nachricht verwendet nur tatsächlich belegte Informationen
+
+### Workflow
+
+- `next_check_at` wird eingehalten
+- fällige und nicht fällige Events werden korrekt unterschieden
+- fehlgeschlagene Abrufe aktualisieren den nächsten Prüfzeitpunkt
+- `status.json` enthält nach dem Lauf alle erforderlichen Felder
+
+## 7. Abnahmekriterien
+
+Die Version gilt erst als vollständig umgesetzt, wenn:
+
+- `pytest -q` erfolgreich ist.
+- `ruff check .` erfolgreich ist.
+- alle kritischen Analyse- und Benachrichtigungstests vorhanden und erfolgreich sind.
+- keine Benachrichtigung bei unverändertem Status doppelt versendet wird.
+- konfigurierte Versandfehler protokolliert werden, ohne den Monitoring-Lauf abzubrechen.
+- `source_url`, `observed_at`, Evidence und Confidence zuverlässig gespeichert werden.
+- Event-Jahr und Registrierungsjahr bei der Analyse berücksichtigt werden.
+- README, Workflow und Dashboard den tatsächlich implementierten Zustand beschreiben.
+
+## 8. Aktueller Fertigstellungsgrad
+
+```text
+MVP-Workflow:                    vorhanden
+Statusmodell:                    vorhanden
+Grundlegende Analyse:            vorhanden
+Dynamische Prüfintervalle:       vorhanden
+Grundlegende Benachrichtigungen: vorhanden
+Alarmhistorie:                   teilweise vorhanden
+Robuste Deduplizierung:          teilweise vorhanden
+Event-Jahr-Prüfung:              teilweise vorhanden
+Quellenpriorität:                teilweise vorhanden
+APNs:                            später
+Produktionsreife:                noch nicht erreicht
+```
+
+Validierung am 2026-09-28: Editor-Diagnosen für alle geänderten Python-Dateien und Tests sind fehlerfrei. Mit `.venv` liefen `pytest -q` mit 25 bestandenen Tests und `ruff check .` erfolgreich.
+
+Wichtig: Dieser Status darf nur nach erneuter Prüfung von Code und Tests aktualisiert werden. Funktionen dürfen nicht als vollständig umgesetzt markiert werden, wenn sie nur im Anforderungsdokument beschrieben sind.
+
+## 9. Kostenmodell
+
+Die kostenfreie Standardvariante verwendet:
+
+- Telegram Bot API für Alarme
+- E-Mail über einen kostenlosen oder bereits vorhandenen SMTP-Zugang
+- GitHub Actions und GitHub Pages innerhalb der kostenlosen Kontingente
+
+Twilio-SMS und OpenAI API sind nicht grundsätzlich kostenlos. Sie bleiben optionale Dienste und dürfen im kostenlosen Standardbetrieb nicht vorausgesetzt werden. Für einen vollständig kostenlosen Betrieb muss die Analyse ohne kostenpflichtige OpenAI-Aufrufe funktionieren.

@@ -1,8 +1,10 @@
+import inspect
 import json
 import logging
 import os
 import tempfile
 from datetime import date, datetime, timedelta, timezone
+from hashlib import sha256
 from pathlib import Path
 from types import SimpleNamespace
 from urllib.parse import urljoin
@@ -22,29 +24,105 @@ IMPORTANT_TRANSITIONS = {
     ("APPROXIMATE_DATE", "SCHEDULED"),
     ("NOT_OPEN", "SCHEDULED"),
     ("OPEN", "LIMITED"),
+    ("OPEN", "WAITLIST"),
     ("OPEN", "SOLD_OUT"),
     ("LIMITED", "SOLD_OUT"),
-    ("OPEN", "WAITLIST"),
+    ("WAITLIST", "SOLD_OUT"),
+    ("OPEN", "CLOSED"),
+}
+
+SOURCE_PRIORITIES = {
+    "organizer": 1,
+    "registration": 2,
+    "news": 3,
+    "calendar": 4,
+    "other": 5,
 }
 
 
-def notify_transition(event: dict, old_status: str, observation: dict) -> None:
+def source_candidates(event: dict) -> list[dict]:
+    candidates = []
+    if event.get("official_url"):
+        candidates.append({"url": event["official_url"], "type": "organizer"})
+    if event.get("registration_url"):
+        candidates.append({"url": event["registration_url"], "type": "registration"})
+    for source in event.get("sources", []):
+        if isinstance(source, dict) and source.get("url"):
+            candidates.append({
+                "url": source["url"],
+                "type": source.get("type", "other"),
+            })
+
+    unique = {}
+    for candidate in candidates:
+        unique.setdefault(candidate["url"], candidate)
+    return sorted(
+        unique.values(),
+        key=lambda candidate: SOURCE_PRIORITIES.get(candidate["type"], SOURCE_PRIORITIES["other"]),
+    )
+
+
+def notify_transition(event: dict, old_status: str, observation: dict) -> list[dict]:
     new_status = observation["status"]
+    transition_is_cancellation = new_status == "CANCELLED"
     message = (
         f"Sportevent-Alarm: {event['name']}\n"
         f"Status: {old_status} -> {new_status}\n"
+        f"Event-Datum: {event.get('event_date') or 'unbekannt'}\n"
         f"Registrierung: {event.get('registration_url') or event.get('official_url')}\n"
         f"Confidence: {observation.get('confidence', 0):.0%}\n"
     )
-    for sender in (
-        lambda: send_telegram(message),
-        lambda: send_sms(message),
-        lambda: send_email(f"Sportevent: {new_status} - {event['name']}", message),
+    if observation.get("registration_start"):
+        message += f"Registrierungsbeginn: {observation['registration_start']}\n"
+    if observation.get("evidence"):
+        message += f"Beleg: {observation['evidence'][:1000]}\n"
+    if transition_is_cancellation:
+        message = f"WICHTIG: Veranstaltung abgesagt\n{message}"
+    deliveries = []
+    for channel, sender in (
+        ("telegram", lambda: send_telegram(message)),
+        ("sms", lambda: send_sms(message)),
+        ("email", lambda: send_email(f"Sportevent: {new_status} - {event['name']}", message)),
     ):
         try:
-            sender()
-        except Exception:
+            success, error = sender()
+            if success:
+                delivery_status = "SENT"
+            elif error and "nicht konfiguriert" in error.lower():
+                delivery_status = "NOT_CONFIGURED"
+            else:
+                delivery_status = "FAILED"
+            deliveries.append({
+                "channel": channel,
+                "status": delivery_status,
+                "error": error if delivery_status == "FAILED" else None,
+            })
+        except Exception as exc:
             logger.exception("Notification delivery failed for event %s", event["id"])
+            deliveries.append({"channel": channel, "status": "FAILED", "error": str(exc)})
+    return deliveries
+
+
+def notification_transition_key(event_id: int | str, old_status: str, new_status: str, content_hash: str | None) -> str:
+    material = f"{event_id}:{old_status}:{new_status}:{content_hash or ''}"
+    return sha256(material.encode("utf-8")).hexdigest()
+
+
+def _notification_was_recorded(event: dict, transition_key: str) -> bool:
+    return any(
+        item.get("transition_key") == transition_key
+        for item in event.get("notification_history", [])
+        if isinstance(item, dict)
+    )
+
+
+def _record_notification(event: dict, transition_key: str, deliveries: list[dict], attempted_at: datetime) -> None:
+    history = event.setdefault("notification_history", [])
+    history.append({
+        "transition_key": transition_key,
+        "attempted_at": attempted_at.isoformat(),
+        "channels": deliveries,
+    })
 
 
 def load_events(path: str | Path) -> list[dict]:
@@ -85,6 +163,13 @@ def _parse_date(value: str | None) -> date | None:
     return date.fromisoformat(value) if value else None
 
 
+def _analyze_event(analyze_fn, text: str, event: dict) -> dict:
+    parameters = inspect.signature(analyze_fn).parameters
+    if "event_context" in parameters:
+        return analyze_fn(text, event_context=event)
+    return analyze_fn(text)
+
+
 def process_events(
     configured_events: list[dict],
     previous_snapshot: dict,
@@ -102,7 +187,11 @@ def process_events(
         old = previous_by_id.get(str(configured["id"]), {})
         event = {**old, **configured}
         event.setdefault("status", "ANNOUNCED")
-        url = event.get("registration_url") or event["official_url"]
+        sources = source_candidates(event)
+        if not sources:
+            raise ValueError(f"Event {event.get('name', event.get('id'))!r} has no source URL")
+        source = sources[0]
+        url = source["url"]
         next_check = _parse_datetime(old.get("next_check_at"))
         if next_check and next_check > now:
             updated_events.append(event)
@@ -111,11 +200,20 @@ def process_events(
         old_status = event["status"]
         try:
             text, content_hash = fetch_page_fn(url)
-            observation = analyze_fn(text)
-            if (old_status, observation["status"]) in IMPORTANT_TRANSITIONS:
-                notify_fn(event, old_status, observation)
+            observation = _analyze_event(analyze_fn, text, event)
+            should_notify = (
+                (old_status, observation["status"]) in IMPORTANT_TRANSITIONS
+                or observation["status"] == "CANCELLED"
+            )
+            transition_key = notification_transition_key(
+                event["id"], old_status, observation["status"], content_hash
+            )
+            if should_notify and not _notification_was_recorded(event, transition_key):
+                deliveries = notify_fn(event, old_status, observation) or []
+                _record_notification(event, transition_key, deliveries, now)
             event.update({
                 "status": observation["status"],
+                "source_url": url,
                 "registration_start": observation.get("registration_start"),
                 "registration_end": observation.get("registration_end"),
                 "approximate_registration_text": observation.get("approximate_registration_text"),

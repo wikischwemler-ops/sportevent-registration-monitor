@@ -13,3 +13,22 @@ def test_sold_out():
 def test_scheduled():
     result = heuristic_analyze("Registration opens 12.01.2027 at 10:00.")
     assert result["status"] == EventStatus.SCHEDULED.value
+
+
+def test_approximate_registration_date_is_not_made_specific():
+    result = heuristic_analyze("Registration opens in January.")
+
+    assert result["status"] == EventStatus.APPROXIMATE_DATE.value
+    assert result["registration_start"] is None
+    assert result["approximate_registration_text"] == "Registration opens in January."
+
+
+def test_registration_date_for_wrong_event_year_is_unknown():
+    result = heuristic_analyze(
+        "Registration opens 12.01.2026 at 10:00.",
+        {"name": "Example Event", "event_date": "2027-08-22"},
+    )
+
+    assert result["status"] == EventStatus.UNKNOWN.value
+    assert result["registration_start"] is None
+    assert result["confidence"] < 0.5

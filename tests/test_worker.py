@@ -1,7 +1,12 @@
 from datetime import date, datetime, timedelta, timezone
 from types import SimpleNamespace
 
-from worker import build_dashboard_snapshot, load_events, process_events
+from worker import (
+    build_dashboard_snapshot,
+    load_events,
+    process_events,
+    source_candidates,
+)
 
 
 def test_snapshot_contains_latest_run_and_event_status():
@@ -114,3 +119,59 @@ def test_load_events_requires_event_name_and_source(tmp_path):
 
     with pytest.raises(ValueError, match="needs registration_url or official_url"):
         load_events(events_file)
+
+
+def test_source_candidates_prefer_official_source():
+    sources = source_candidates({
+        "official_url": "https://example.com/official",
+        "registration_url": "https://example.com/register",
+        "sources": [
+            {"url": "https://example.com/news", "type": "news"},
+            {"url": "https://example.com/other", "type": "other"},
+        ],
+    })
+
+    assert [source["type"] for source in sources] == [
+        "organizer", "registration", "news", "other"
+    ]
+
+
+def test_notification_history_deduplicates_same_transition_content():
+    now = datetime(2026, 9, 26, 12, tzinfo=timezone.utc)
+    configured = [{
+        "id": 1,
+        "name": "City Run",
+        "official_url": "https://example.com",
+        "event_date": "2027-05-01",
+    }]
+    previous = {"events": [{
+        **configured[0],
+        "status": "SCHEDULED",
+        "next_check_at": None,
+    }]}
+    notifications = []
+
+    def notify(event, old_status, observation):
+        notifications.append((event["id"], old_status, observation["status"]))
+        return [{"channel": "telegram", "status": "NOT_CONFIGURED", "error": None}]
+
+    updated, _ = process_events(
+        configured,
+        previous,
+        now,
+        fetch_page_fn=lambda url: ("Registration is now open", "same-hash"),
+        analyze_fn=lambda text: {"status": "OPEN", "confidence": 0.9, "evidence": text},
+        notify_fn=notify,
+    )
+    updated[0]["next_check_at"] = None
+
+    process_events(
+        configured,
+        {"events": updated},
+        now + timedelta(minutes=5),
+        fetch_page_fn=lambda url: ("Registration is now open", "same-hash"),
+        analyze_fn=lambda text: {"status": "OPEN", "confidence": 0.9, "evidence": text},
+        notify_fn=notify,
+    )
+
+    assert notifications == [(1, "SCHEDULED", "OPEN")]

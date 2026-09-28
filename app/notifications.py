@@ -11,8 +11,19 @@ def send_telegram(message: str) -> tuple[bool, str | None]:
         return False, "Telegram nicht konfiguriert"
     url = f"https://api.telegram.org/bot{settings.telegram_bot_token}/sendMessage"
     try:
-        r = httpx.post(url, json={"chat_id": settings.telegram_chat_id, "text": message}, timeout=20)
+        r = httpx.post(
+            url,
+            json={
+                "chat_id": settings.telegram_chat_id,
+                "text": message[:4096],
+                "disable_web_page_preview": True,
+            },
+            timeout=settings.request_timeout_seconds,
+        )
         r.raise_for_status()
+        payload = r.json()
+        if not payload.get("ok"):
+            return False, payload.get("description", "Telegram API Fehler")
         return True, None
     except Exception as exc:
         return False, str(exc)

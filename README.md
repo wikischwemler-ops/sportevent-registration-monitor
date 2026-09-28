@@ -37,3 +37,18 @@ Der Monitoring-Workflow veröffentlicht nach jedem Lauf `dashboard/index.html` u
 
 ## iPhone
 Normale APNs-Pushes werden als nächster Schritt angebunden. Kritische Alerts benötigen Apples spezielle Berechtigung.
+
+## Telegram-Benachrichtigungen
+Telegram ist der kostenlose primäre Alarmkanal.
+
+1. In Telegram mit `@BotFather` einen Bot anlegen und den Bot-Token kopieren.
+2. Den Bot in Telegram starten oder zu einer Gruppe hinzufügen.
+3. Die Chat-ID des Ziel-Chats ermitteln.
+4. In GitHub Actions folgende Repository-Secrets hinterlegen:
+
+```text
+TELEGRAM_BOT_TOKEN
+TELEGRAM_CHAT_ID
+```
+
+Der Worker prüft die Antwort der Telegram Bot API. Nicht konfigurierte Telegram-Werte werden als optionaler, nicht konfigurierter Kanal behandelt und stoppen den Monitoring-Lauf nicht.

@@ -1,0 +1,1449 @@
+# SportEvent Registration Monitor – Repository prüfen, Workflow nachvollziehen und gezielt weiterentwickeln
+
+Du arbeitest an einem **bereits bestehenden Python-Projekt** namens:
+
+**SportEvent Registration Monitor**
+
+GitHub Repository:
+
+`https://github.com/wikischwemler-ops/sportevent-registration-monitor`
+
+## 1. Grundregel: Bestehendes Projekt weiterentwickeln
+
+**Das Projekt NICHT neu aufbauen.**
+
+Bevor du Änderungen vornimmst:
+
+1. Analysiere das komplette Repository.
+2. Lies alle relevanten Python-Dateien.
+3. Lies alle Tests.
+4. Lies alle GitHub Actions.
+5. Lies README und Konfigurationsdateien.
+6. Prüfe `events.json`.
+7. Prüfe `status.json` bzw. deren Erzeugung und Veröffentlichung.
+8. Prüfe Datenmodelle, API, Web-Dashboard, Monitoring, Scheduler und Notifications.
+9. Prüfe Docker-Dateien und Requirements.
+10. Ermittle den **tatsächlich implementierten Ist-Zustand**.
+
+Danach soll die bestehende Architektur **gezielt verbessert** werden.
+
+Keine unnötigen Komplett-Umbauten.
+
+Bestehende funktionierende Komponenten möglichst erhalten.
+
+---
+
+# 2. WICHTIG: Aktuelle Architektur korrekt verstehen
+
+Es gibt eine wichtige Korrektur zu älteren Anforderungen:
+
+## PostgreSQL ist aktuell NICHT die Persistenz des GitHub-Actions-Workers.
+
+Der aktuelle Worker arbeitet mit:
+
+```text
+events.json
+status.json
+GitHub Actions
+GitHub Pages
+```
+
+`status.json` wird aktuell über GitHub Pages bereitgestellt und vom Worker verwendet.
+
+Der aktuelle Workflow ist vereinfacht:
+
+```text
+GitHub Actions
+      │
+      ▼
+events.json
+      │
+      ▼
+status.json laden
+      │
+      ▼
+fällige Events bestimmen
+      │
+      ▼
+Webseiten abrufen
+      │
+      ▼
+Python / BeautifulSoup / OpenAI
+      │
+      ▼
+Status aktualisieren
+      │
+      ├──► Benachrichtigungen
+      │
+      ▼
+status.json aktualisieren
+      │
+      ▼
+GitHub Pages
+```
+
+**Bitte PostgreSQL NICHT als bereits implementierte Persistenz darstellen.**
+
+PostgreSQL kann später als mögliche Weiterentwicklung betrachtet werden.
+
+Für diese Arbeitsphase gilt:
+
+> `status.json` und `events.json` sind der aktuelle operative Datenbestand des Workers.
+
+---
+
+# 3. events.json – überwachte Events
+
+Die zu überwachenden Veranstaltungen werden aktuell in:
+
+```text
+events.json
+```
+
+definiert.
+
+Beispiel:
+
+```json
+[
+  {
+    "id": 1,
+    "name": "Allgäu Triathlon",
+    "sport": "Triathlon",
+    "location": "Allgäu",
+    "event_date": "2027-08-22",
+    "official_url": "https://www.808project.de/allgaeutriathlon",
+    "priority": "high"
+  },
+  {
+    "id": 2,
+    "name": "adidas INFINITE TRAILS 2027",
+    "sport": "Trailrunning",
+    "location": "Gastein Valley",
+    "event_date": null,
+    "official_url": "https://infinite-trails.com/en/",
+    "registration_url": "https://infinite-trails.com/en/waitlist-2027/",
+    "priority": "high"
+  }
+]
+```
+
+Die vollständige Datei enthält aktuell mehrere überwachte Veranstaltungen.
+
+Die Architektur muss deshalb berücksichtigen:
+
+```text
+events.json
+    │
+    ├── Event-ID
+    ├── Name
+    ├── Sport
+    ├── Location
+    ├── Event-Jahr / Event-Datum
+    ├── official_url
+    ├── optional registration_url
+    └── priority
+```
+
+Der Worker darf diese Eventdefinitionen nicht mit den erkannten Statusdaten verwechseln.
+
+---
+
+# 4. status.json
+
+`status.json` enthält die aktuellen Monitoring-Ergebnisse.
+
+Darin können beispielsweise enthalten sein:
+
+```text
+event
+status
+confidence
+evidence
+source_url
+observed_at
+registration_start
+registration_end
+approximate_registration_text
+next_check_at
+relevante Hinweise
+```
+
+Die genaue Struktur muss anhand des bestehenden Codes ermittelt werden.
+
+**Nicht einfach eine neue Struktur erfinden.**
+
+Bestehende Strukturen zuerst analysieren und nur gezielt erweitern.
+
+---
+
+# 5. Gewünschter Workflow
+
+Der Workflow soll logisch diesem Ablauf entsprechen:
+
+## Schritt 1 – GitHub Actions
+
+GitHub Actions startet den Worker regelmäßig.
+
+Aktuell beispielsweise ungefähr:
+
+```text
+alle 5 Minuten
+```
+
+Der Worker soll aber nicht jedes Event bei jedem Lauf erneut prüfen.
+
+---
+
+## Schritt 2 – events.json laden
+
+Der Worker lädt:
+
+```text
+events.json
+```
+
+und erhält daraus die Liste der überwachten Events.
+
+---
+
+## Schritt 3 – status.json laden
+
+Der Worker lädt den aktuellen Statusbestand.
+
+Damit kann er feststellen:
+
+* bisheriger Status
+* letzte Beobachtung
+* `next_check_at`
+* bereits bekannte Öffnungsdaten
+* bisherige Evidence
+* bereits versendete Benachrichtigungen
+
+---
+
+# 6. Fällige Events bestimmen
+
+Es soll nur ein Event verarbeitet werden, wenn:
+
+```text
+next_check_at <= now
+```
+
+Beispielsweise:
+
+```text
+Event A
+next_check_at = 20:05
+→ prüfen
+
+Event B
+next_check_at = 22:00
+→ noch nicht prüfen
+```
+
+Das ist wichtig, damit GitHub Actions zwar regelmäßig laufen kann, aber nicht jedes Event unnötig abgerufen wird.
+
+---
+
+# 7. Webseiten abrufen
+
+Für ein fälliges Event werden die relevanten Webseiten abgerufen.
+
+Priorität:
+
+1. offizielle Veranstalterseite
+2. offizielles Registrierungsportal
+3. offizielle Event-News / Veranstalter-News
+4. offizielle Kalender
+5. andere öffentliche Quellen
+
+Die bestehende Architektur für:
+
+```text
+httpx
+BeautifulSoup
+```
+
+soll möglichst erhalten bleiben.
+
+---
+
+# 8. AI-Analyse
+
+OpenAI wird für die Analyse unstrukturierter Webseiten verwendet.
+
+Die AI soll insbesondere erkennen:
+
+* Registrierungsstatus
+* Registrierungsbeginn
+* Registrierungsende
+* ungefähren Registrierungszeitraum
+* Teilnehmerlimit
+* Warteliste
+* Ausverkauft
+* konkrete Startzeit
+* relevante Hinweise
+* Event-Jahr
+
+Wichtig:
+
+## Keine Halluzinationen
+
+Wenn auf einer Webseite steht:
+
+> Registration opens in January.
+
+darf daraus NICHT:
+
+> Registration opens January 1.
+
+gemacht werden.
+
+Stattdessen:
+
+```text
+status = APPROXIMATE_DATE
+approximate_registration_text = "Registration opens in January."
+registration_start = null
+```
+
+Wenn eine Aussage nicht eindeutig ist:
+
+```text
+status = UNKNOWN
+```
+
+oder niedrige Confidence.
+
+---
+
+# 9. Event-Jahr zwingend berücksichtigen
+
+Ein zentraler Fehler, der verhindert werden muss:
+
+Eine Webseite kann Informationen über ein altes Event-Jahr enthalten.
+
+Beispiel:
+
+```text
+Event auf der überwachten Liste:
+IRONMAN Example 2027
+```
+
+Webseite:
+
+```text
+Registration opens January 10, 2026.
+```
+
+Diese Information darf nicht automatisch für das Event 2027 übernommen werden.
+
+Die Analyse muss deshalb den Kontext berücksichtigen:
+
+* Event-Jahr
+* Event-Datum
+* Registrierungsjahr
+* Titel der Seite
+* URL
+* Seiteninhalt
+* Kontext der gefundenen Aussage
+
+Wenn nicht eindeutig feststeht, dass die Information zum überwachten Event gehört:
+
+```text
+UNKNOWN
+```
+
+oder entsprechend niedrige Confidence.
+
+Dafür müssen passende Daten an `analyze()` bzw. die Analysepipeline übergeben werden.
+
+---
+
+# 10. Statusmodell
+
+Das bestehende Statusmodell soll erhalten und vollständig unterstützt werden:
+
+```text
+ANNOUNCED
+NOT_OPEN
+APPROXIMATE_DATE
+SCHEDULED
+OPEN
+LIMITED
+WAITLIST
+SOLD_OUT
+CLOSED
+CANCELLED
+UNKNOWN
+```
+
+Bedeutung:
+
+### ANNOUNCED
+
+Event angekündigt, aber keine belastbare Information zum Registrierungsstatus.
+
+### NOT_OPEN
+
+Anmeldung definitiv noch nicht geöffnet.
+
+### APPROXIMATE_DATE
+
+Nur ungefährer Zeitraum bekannt.
+
+Beispiel:
+
+```text
+Registration opens in January.
+```
+
+### SCHEDULED
+
+Konkretes Registrierungsdatum bzw. Zeitpunkt bekannt.
+
+### OPEN
+
+Anmeldung geöffnet.
+
+### LIMITED
+
+Anmeldung geöffnet, aber begrenzte bzw. knappe Verfügbarkeit.
+
+### WAITLIST
+
+Nur Warteliste verfügbar.
+
+### SOLD_OUT
+
+Keine Plätze mehr verfügbar.
+
+### CLOSED
+
+Anmeldung geschlossen.
+
+### CANCELLED
+
+Veranstaltung abgesagt.
+
+### UNKNOWN
+
+Status kann nicht zuverlässig bestimmt werden.
+
+---
+
+# 11. Analyseergebnis
+
+Wichtige Erkenntnisse sollen strukturiert gespeichert werden.
+
+Mindestens:
+
+```text
+status
+confidence
+evidence
+source_url
+observed_at
+```
+
+Wenn relevant zusätzlich:
+
+```text
+registration_start
+registration_end
+approximate_registration_text
+event_year
+registration_year
+participant_limit
+notes
+```
+
+Dabei gilt:
+
+> Nur tatsächlich belegte Informationen dürfen als Fakten gespeichert werden.
+
+---
+
+# 12. Fakten und Vermutungen
+
+AI-Ausgaben müssen zwischen:
+
+```text
+Fakt
+```
+
+und
+
+```text
+Vermutung
+```
+
+unterscheiden.
+
+Eine Vermutung darf nicht als sichere Information in den Status übernommen werden.
+
+Beispiel:
+
+Webseite:
+
+> Registration usually opens around January.
+
+Nicht daraus machen:
+
+```text
+SCHEDULED
+registration_start = January 1
+```
+
+sondern beispielsweise:
+
+```text
+APPROXIMATE_DATE
+approximate_registration_text = "Registration usually opens around January."
+```
+
+---
+
+# 13. Quellenpriorität
+
+Die bestehende Architektur soll so erweitert werden, dass mehrere Quellen langfristig unterstützt werden können.
+
+Priorität:
+
+```text
+1. offizielle Veranstalterseite
+2. offizielles Registrierungsportal
+3. offizielle Event-News
+4. offizieller Kalender
+5. andere Quellen
+```
+
+Eine Drittquelle darf eine widersprüchliche offizielle Information nicht einfach überschreiben.
+
+Wenn mehrere Quellen vorhanden sind, soll die Quelle mit höherer Priorität bevorzugt werden.
+
+Die konkrete Implementierung soll sich an der bestehenden Architektur orientieren.
+
+Keine unnötige Komplettmigration.
+
+---
+
+# 14. Statusänderungen erkennen
+
+Der aktuelle Status muss mit dem vorherigen Status verglichen werden.
+
+Beispiel:
+
+```text
+NOT_OPEN
+    ↓
+SCHEDULED
+```
+
+oder:
+
+```text
+SCHEDULED
+    ↓
+OPEN
+```
+
+oder:
+
+```text
+OPEN
+    ↓
+LIMITED
+```
+
+oder:
+
+```text
+LIMITED
+    ↓
+WAITLIST
+```
+
+oder:
+
+```text
+WAITLIST
+    ↓
+SOLD_OUT
+```
+
+oder:
+
+```text
+OPEN
+    ↓
+CLOSED
+```
+
+oder:
+
+```text
+OPEN
+    ↓
+CANCELLED
+```
+
+Solche relevanten Änderungen müssen für das Alarmkonzept berücksichtigt werden.
+
+---
+
+# 15. ALARM- UND BENACHRICHTIGUNGSKONZEPT
+
+Dies ist ein eigener wichtiger Arbeitsbereich.
+
+Aktuell gibt es bereits einfache Sender für:
+
+```text
+Telegram
+SMS / Twilio
+E-Mail / SMTP
+```
+
+APNs ist für später vorgesehen.
+
+Die bestehende Funktionalität soll analysiert und gezielt erweitert werden.
+
+## Benachrichtigungsrelevante Ereignisse
+
+Mindestens prüfen und unterstützen:
+
+### Neues konkretes Öffnungsdatum
+
+Beispiel:
+
+```text
+APPROXIMATE_DATE
+        ↓
+SCHEDULED
+```
+
+mit:
+
+```text
+Registration opens:
+12.01.2027 10:00 CET
+```
+
+→ Alarm.
+
+### Anmeldung geöffnet
+
+```text
+SCHEDULED
+    ↓
+OPEN
+```
+
+→ sofortiger Alarm.
+
+### Verfügbarkeit wird knapp
+
+```text
+OPEN
+    ↓
+LIMITED
+```
+
+→ Alarm.
+
+### Warteliste
+
+```text
+OPEN / LIMITED
+    ↓
+WAITLIST
+```
+
+→ Alarm.
+
+### Ausverkauft
+
+```text
+OPEN / LIMITED / WAITLIST
+    ↓
+SOLD_OUT
+```
+
+→ Alarm.
+
+### Anmeldung geschlossen
+
+```text
+OPEN
+    ↓
+CLOSED
+```
+
+→ relevante Benachrichtigung.
+
+### Veranstaltung abgesagt
+
+```text
+*
+ ↓
+CANCELLED
+```
+
+→ wichtige Benachrichtigung.
+
+### Rückkehr zu einem anderen Status
+
+Auch ungewöhnliche Statusänderungen müssen verarbeitet werden, ohne dass der Worker abstürzt.
+
+---
+
+# 16. Deduplizierung von Alarmen
+
+Der Worker läuft möglicherweise alle 5 Minuten.
+
+Deshalb darf bei folgendem Zustand:
+
+```text
+OPEN
+```
+
+nicht alle 5 Minuten erneut dieselbe Nachricht versendet werden.
+
+Es muss zwischen:
+
+```text
+Status wurde gerade geändert
+```
+
+und:
+
+```text
+Status ist weiterhin unverändert
+```
+
+unterschieden werden.
+
+Eine Benachrichtigung soll nur einmal pro relevanter Statusänderung erfolgen, sofern keine bewusste Wiederholung/Eskalation vorgesehen ist.
+
+---
+
+# 17. Benachrichtigungsprotokoll
+
+Der Worker soll nachvollziehbar speichern können:
+
+```text
+wann
+für welches Event
+welcher Status
+welcher Kanal
+welche Nachricht
+erfolgreich / fehlgeschlagen
+Fehlermeldung
+```
+
+Dabei die bestehende Architektur nutzen.
+
+Nicht einfach ein völlig neues Datenbanksystem einführen.
+
+Da aktuell `status.json` verwendet wird, prüfen, welche Informationen dort sinnvoll und dauerhaft gespeichert werden können.
+
+---
+
+# 18. Nicht konfigurierte Kanäle
+
+Wenn beispielsweise Telegram nicht konfiguriert ist:
+
+```text
+TELEGRAM_BOT_TOKEN fehlt
+```
+
+darf das nicht wie ein echter Versandfehler behandelt werden.
+
+Unterscheide:
+
+```text
+Kanal nicht konfiguriert
+```
+
+von:
+
+```text
+Kanal konfiguriert, Versand fehlgeschlagen
+```
+
+Nicht konfigurierte optionale Kanäle sollen den gesamten Worker nicht als fehlgeschlagen erscheinen lassen.
+
+---
+
+# 19. Fehler und Retry
+
+Wenn ein konfigurierter Kanal einen Fehler liefert:
+
+```text
+Telegram API Fehler
+SMTP Fehler
+Twilio Fehler
+```
+
+soll der Fehler sauber protokolliert werden.
+
+Die Benachrichtigungslogik soll nicht den kompletten Monitoring-Lauf abbrechen.
+
+Prüfe, ob eine sinnvolle Retry-Strategie erforderlich ist.
+
+Keine endlosen Retries.
+
+---
+
+# 20. Benachrichtigungsinhalt
+
+Eine Benachrichtigung sollte möglichst wichtige Informationen enthalten.
+
+Beispiel:
+
+```text
+🚨 Registrierung geöffnet
+
+Event:
+Allgäu Triathlon
+
+Event-Datum:
+22.08.2027
+
+Status:
+OPEN
+
+Registrierungsbeginn:
+jetzt
+
+Quelle:
+https://...
+
+Beleg:
+"Registration is now open..."
+
+Beobachtet:
+28.09.2026 20:05
+```
+
+Bei `SCHEDULED`:
+
+```text
+📅 Neues Registrierungsdatum
+
+Event:
+...
+
+Registrierung öffnet:
+12.01.2027 10:00 CET
+
+Status:
+SCHEDULED
+
+Beleg:
+"..."
+
+Quelle:
+...
+```
+
+Bei `WAITLIST`:
+
+```text
+⚠️ Nur Warteliste
+
+Event:
+...
+
+Status:
+WAITLIST
+
+Quelle:
+...
+
+Beleg:
+"..."
+```
+
+Die Nachrichten sollen aber nur Informationen enthalten, die tatsächlich erkannt und belegt wurden.
+
+---
+
+# 21. Monitoring-Frequenz
+
+Das Monitoring soll dynamisch über:
+
+```text
+next_check_at
+```
+
+gesteuert werden.
+
+Grundidee:
+
+```text
+> 6 Monate bis Event
+→ ca. 1x pro Woche
+
+3–6 Monate
+→ alle 2–3 Tage
+
+1–3 Monate
+→ 1x täglich
+
+< 30 Tage
+→ alle 2 Stunden
+
+Registrierung innerhalb 48 Stunden
+→ alle 5 Minuten
+
+OPEN oder LIMITED
+→ alle 5 Minuten
+```
+
+GitHub Actions kann technisch beispielsweise alle 5 Minuten laufen.
+
+Aber:
+
+> Nicht jedes Event bei jedem Lauf abrufen.
+
+Nur:
+
+```text
+next_check_at <= now
+```
+
+prüfen.
+
+---
+
+# 22. status.json aktualisieren
+
+Nach erfolgreicher Verarbeitung:
+
+```text
+alter Status
+      ↓
+neuer Status
+      ↓
+Statusvergleich
+      ↓
+Alarmierung
+      ↓
+next_check_at berechnen
+      ↓
+status.json aktualisieren
+```
+
+Dabei müssen insbesondere erhalten bleiben:
+
+```text
+status
+confidence
+evidence
+source_url
+observed_at
+next_check_at
+```
+
+sowie weitere bereits vorhandene Felder.
+
+---
+
+# 23. GitHub Pages
+
+Die aktualisierte:
+
+```text
+status.json
+```
+
+wird weiterhin über GitHub Pages bereitgestellt.
+
+Das Dashboard kann diese Daten anschließend abrufen.
+
+Dieser bestehende Workflow soll erhalten bleiben.
+
+---
+
+# 24. Dashboard
+
+Das bestehende Web-Dashboard soll analysiert werden.
+
+Es soll mindestens sinnvoll darstellen können:
+
+* Event
+* Event-Datum
+* Status
+* Registrierungsbeginn
+* ungefähren Registrierungszeitraum
+* Confidence
+* Evidence
+* Quelle
+* letzte Prüfung
+* nächster Check
+
+Das Dashboard soll keine Informationen anzeigen, die nicht aus den vorhandenen Daten stammen.
+
+---
+
+# 25. APNs
+
+Apple Push Notifications sind aktuell:
+
+```text
+SPÄTER
+```
+
+und müssen nicht als vollständig implementiert dargestellt werden.
+
+Prüfe den vorhandenen Code:
+
+```text
+app/apns.py
+```
+
+und dokumentiere den tatsächlichen Status.
+
+Keine Behauptung, APNs sei bereits produktiv implementiert, wenn das nicht der Fall ist.
+
+---
+
+# 26. Tests
+
+Erweitere die Tests gezielt für die kritischen Anforderungen.
+
+Mindestens Tests für:
+
+### Statusanalyse
+
+* `OPEN`
+* `LIMITED`
+* `WAITLIST`
+* `SOLD_OUT`
+* `CLOSED`
+* `CANCELLED`
+* `UNKNOWN`
+
+### Datumsanalyse
+
+Test:
+
+```text
+Registration opens January.
+```
+
+muss zu:
+
+```text
+APPROXIMATE_DATE
+```
+
+führen.
+
+Nicht:
+
+```text
+SCHEDULED
+```
+
+Test für:
+
+```text
+Registration opens January 12, 2027 at 10:00 CET.
+```
+
+muss ein konkretes Datum erkennen.
+
+### Event-Jahr
+
+Test:
+
+```text
+überwachtes Event = 2027
+Webseite enthält nur Registrierungsinformation für 2026
+```
+
+→ Information darf nicht als 2027 übernommen werden.
+
+### Halluzinationsschutz
+
+Nicht belegte konkrete Daten dürfen nicht erzeugt werden.
+
+### Evidence
+
+`source_url` und `observed_at` müssen zuverlässig gesetzt werden.
+
+### next_check_at
+
+Testen, dass unterschiedliche Eventzustände unterschiedliche Prüfintervalle erzeugen.
+
+### Benachrichtigungen
+
+Tests für:
+
+```text
+NOT_OPEN → SCHEDULED
+SCHEDULED → OPEN
+OPEN → LIMITED
+LIMITED → WAITLIST
+WAITLIST → SOLD_OUT
+OPEN → CLOSED
+* → CANCELLED
+```
+
+Außerdem:
+
+* keine Doppelbenachrichtigung bei unverändertem Status
+* nicht konfigurierte Kanäle verursachen keinen echten Fehler
+* Versandfehler eines Kanals brechen den Monitoring-Lauf nicht ab
+
+### Quellenpriorität
+
+Wenn mehrere Quellen widersprüchliche Informationen liefern, muss die definierte Quellenpriorität berücksichtigt werden.
+
+---
+
+# 27. GitHub Actions
+
+Der bestehende Fix darf NICHT entfernt werden.
+
+In:
+
+```text
+.github/workflows/test.yml
+```
+
+muss weiterhin beispielsweise vorhanden sein:
+
+```yaml
+- name: Run tests
+  env:
+    PYTHONPATH: .
+  run: pytest -q
+```
+
+Nach Änderungen immer prüfen:
+
+```bash
+pytest -q
+```
+
+und:
+
+```bash
+ruff check .
+```
+
+---
+
+# 28. README und Dokumentation
+
+Nach den Änderungen muss die Dokumentation den **tatsächlichen Zustand** widerspiegeln.
+
+Insbesondere darf README nicht behaupten:
+
+```text
+PostgreSQL ist die aktuelle Persistenz des GitHub-Actions-Workers
+```
+
+wenn tatsächlich:
+
+```text
+events.json
+status.json
+GitHub Pages
+```
+
+verwendet werden.
+
+Falls PostgreSQL im Code bereits teilweise vorbereitet ist, muss klar unterschieden werden zwischen:
+
+```text
+implementiert
+```
+
+und:
+
+```text
+vorbereitet / zukünftige Option
+```
+
+---
+
+# 29. Zielbild des Workflows
+
+Der aktuelle Workflow soll konzeptionell diesem Bild entsprechen:
+
+```text
+                    ┌──────────────────────┐
+                    │    GitHub Actions    │
+                    │  Worker, ca. 5 Min.  │
+                    └──────────┬───────────┘
+                               │
+                 ┌─────────────┴─────────────┐
+                 ▼                           ▼
+        ┌────────────────┐          ┌────────────────┐
+        │   events.json  │          │   status.json  │
+        │ überwachte     │          │ aktueller      │
+        │ Events         │          │ Status         │
+        └───────┬────────┘          └───────┬────────┘
+                │                           │
+                └────────────┬──────────────┘
+                             ▼
+                  ┌─────────────────────┐
+                  │ Fällige Events      │
+                  │ next_check_at <= now│
+                  └──────────┬──────────┘
+                             │
+                             ▼
+                  ┌─────────────────────┐
+                  │ Webseiten abrufen   │
+                  │ httpx / BeautifulSoup│
+                  └──────────┬──────────┘
+                             │
+                             ▼
+                  ┌─────────────────────┐
+                  │ OpenAI / Analyse    │
+                  │ Status + Evidence   │
+                  │ Event-Jahr prüfen   │
+                  └──────────┬──────────┘
+                             │
+                             ▼
+                  ┌─────────────────────┐
+                  │ Status vergleichen  │
+                  │ + aktualisieren     │
+                  └──────────┬──────────┘
+                             │
+                    ┌────────┴─────────┐
+                    ▼                  ▼
+          ┌─────────────────┐   ┌──────────────────┐
+          │ Alarmierung     │   │ next_check_at    │
+          │ Telegram        │   │ neu berechnen    │
+          │ SMS             │   └────────┬─────────┘
+          │ E-Mail          │            │
+          │ APNs später     │            │
+          └────────┬────────┘            │
+                   └────────────┬────────┘
+                                ▼
+                     ┌──────────────────┐
+                     │ status.json      │
+                     │ aktualisieren    │
+                     └────────┬─────────┘
+                              │
+                              ▼
+                     ┌──────────────────┐
+                     │ GitHub Pages     │
+                     │ Veröffentlichung │
+                     └────────┬─────────┘
+                              │
+                              ▼
+                     ┌──────────────────┐
+                     │ Dashboard /     │
+                     │ Benutzer        │
+                     └──────────────────┘
+```
+
+---
+
+# 30. Deine konkrete Aufgabe
+
+Arbeite jetzt **nicht blind nach diesem Dokument**, sondern vergleiche es mit dem tatsächlichen Repository.
+
+Erstelle zuerst eine Bestandsaufnahme:
+
+```text
+IST-ZUSTAND
+```
+
+und unterscheide klar:
+
+```text
+bereits implementiert
+teilweise implementiert
+fehlt
+fehlerhaft
+```
+
+Danach behebe die wichtigsten Abweichungen.
+
+Priorität:
+
+1. Aktuelle Architektur korrekt erhalten
+2. `events.json` / `status.json` Workflow korrekt erhalten
+3. Event-Jahr sicher berücksichtigen
+4. `APPROXIMATE_DATE` korrekt behandeln
+5. Halluzinationsschutz verbessern
+6. Evidence / source_url / observed_at zuverlässig speichern
+7. Statusübergänge vervollständigen
+8. Alarm- und Benachrichtigungskonzept vollständig machen
+9. Benachrichtigungen deduplizieren und Fehler sauber behandeln
+10. Quellenpriorität verbessern
+11. Monitoring über `next_check_at` prüfen
+12. Tests für kritische Anforderungen ergänzen
+13. README aktualisieren
+14. erst danach weitere Architekturverbesserungen betrachten
+
+**Keine PostgreSQL-Migration durchführen**, solange diese nicht ausdrücklich beauftragt wird.
+
+---
+
+# 31. Abschlussprüfung
+
+Nach den Änderungen ausführen:
+
+```bash
+pytest -q
+```
+
+und:
+
+```bash
+ruff check .
+```
+
+Zusätzlich prüfen:
+
+```text
+GitHub Actions
+status.json
+events.json
+GitHub Pages
+Dashboard
+Notifications
+```
+
+Am Ende eine kurze Zusammenfassung liefern:
+
+```text
+ÄNDERUNGEN
+- ...
+
+NOCH OFFEN
+- ...
+
+TESTS
+pytest -q: PASS/FAIL
+ruff check .: PASS/FAIL
+
+AKTUELLER WORKFLOW
+GitHub Actions
+→ events.json
+→ status.json
+→ fällige Events
+→ Webseiten
+→ OpenAI
+→ Statusvergleich
+→ Alarmierung
+→ next_check_at
+→ status.json
+→ GitHub Pages
+```
+
+Wichtig:
+
+**Keine Funktionen als erledigt markieren, die du im Repository nicht tatsächlich überprüft hast.**
+
+---
+
+# 32. Bewertung und verbindliche Präzisierungen
+
+## Verständlichkeit
+
+Die Anforderungen sind fachlich verständlich und beschreiben das gewünschte Verhalten ausreichend. Die Alarmierung und Benachrichtigung ist jetzt als eigener Arbeitsbereich enthalten.
+
+Für die Umsetzung müssen die folgenden Punkte verbindlich gelten:
+
+## Umsetzbarkeit
+
+Die Anforderungen sind mit der bestehenden Architektur umsetzbar. Die Umsetzung soll schrittweise erfolgen und zunächst bei `events.json`, `status.json` und GitHub Actions bleiben. Eine PostgreSQL-Migration ist dafür nicht erforderlich.
+
+## Verbindliche technische Regeln
+
+### Benachrichtigungsprotokoll
+
+Da `status.json` aktuell der dauerhafte Statusbestand des Workers ist, muss die Lösung festlegen, wo der Versandstatus gespeichert wird. Mindestens erforderlich ist eine strukturierte Historie pro Alarm mit:
+
+```text
+event_id
+transition_key
+channel
+message_type
+attempted_at
+success
+error
+```
+
+Der vollständige Nachrichtentext darf nur gespeichert werden, wenn dadurch keine vertraulichen Daten öffentlich über GitHub Pages bereitgestellt werden.
+
+### Deduplizierung
+
+Eine Deduplizierung darf nicht ausschließlich auf `event_id + old_status + new_status` basieren. Ein Event kann beispielsweise mehrfach zwischen `OPEN` und `LIMITED` wechseln.
+
+Der `transition_key` muss deshalb zusätzlich eine Beobachtung oder einen Content-Hash berücksichtigen. Derselbe unveränderte Seiteninhalt darf keine erneute Nachricht erzeugen; eine später erneut belegte Statusänderung muss dagegen alarmierbar bleiben.
+
+### Kanalstatus
+
+Jeder Kanal muss mindestens einen der folgenden Zustände liefern:
+
+```text
+NOT_CONFIGURED
+SENT
+FAILED
+```
+
+`NOT_CONFIGURED` ist kein Monitoringfehler. `FAILED` gilt nur für einen konfigurierten Kanal, dessen Versand technisch fehlgeschlagen ist.
+
+### Fehlerbehandlung und Retry
+
+Ein Fehler in einem Kanal darf weder die Verarbeitung des Events noch andere Kanäle abbrechen. Retries müssen begrenzt sein und dürfen bei jedem GitHub-Actions-Lauf nicht automatisch dieselbe Nachricht erneut versenden.
+
+### Benachrichtigungsinhalt
+
+Eine Nachricht darf nur Werte aus der aktuellen, belegten Beobachtung verwenden. Wenn Quelle, Evidence, Event-Datum oder Registrierungsbeginn nicht bekannt sind, müssen diese Felder weggelassen oder ausdrücklich als unbekannt gekennzeichnet werden.
+
+### Quellenfeld
+
+Der Feldname wird einheitlich als `source_url` verwendet. Die abweichende Schreibweise `sources_url` in Abschnitt 26 ist zu korrigieren.
+
+## Abnahmekriterien
+
+Die Alarmierungsanforderung gilt erst als umgesetzt, wenn mindestens folgende Fälle automatisiert getestet sind:
+
+1. Jeder relevante Statuswechsel erzeugt höchstens einen Alarm pro belegter Beobachtung.
+2. Ein unveränderter Status erzeugt bei wiederholten Worker-Läufen keinen neuen Alarm.
+3. Ein Wechsel `OPEN -> LIMITED -> OPEN -> LIMITED` kann bei jeder neuen belegten Änderung erneut alarmieren.
+4. Ein nicht konfigurierter Kanal wird als `NOT_CONFIGURED` protokolliert und lässt den Lauf erfolgreich bleiben.
+5. Ein Fehler eines konfigurierten Kanals wird als `FAILED` protokolliert und lässt die übrige Verarbeitung weiterlaufen.
+6. Die Nachricht enthält Status, Event, Quelle und Evidence nur dann, wenn diese Informationen tatsächlich vorhanden sind.
+7. `CANCELLED` erzeugt unabhängig vom vorherigen Status eine wichtige Benachrichtigung.
+
+## Ergebnis der Analyse
+
+```text
+Verständlichkeit: gut, nach den Präzisierungen eindeutig
+Technische Umsetzbarkeit: ja, ohne PostgreSQL-Migration
+Größtes Risiko: dauerhafte Alarmhistorie und korrekte Deduplizierung in status.json
+Nächster Umsetzungsschritt: Ist-Zustand der bestehenden Notification-Funktionen testen und danach die Alarmhistorie erweitern
+
+---
+
+# 33. Kostenfreie Dienste als Randbedingung
+
+Die Standardlösung soll ohne laufende Kosten nutzbar sein.
+
+## Kostenfreie Standardkanäle
+
+- Telegram Bot API
+- E-Mail über einen vorhandenen kostenlosen SMTP-Anbieter oder ein vorhandenes E-Mail-Konto
+- GitHub Actions und GitHub Pages innerhalb der jeweils geltenden kostenlosen Kontingente
+
+## Kostenpflichtige Optionen
+
+- Twilio-SMS ist nicht grundsätzlich kostenlos und darf deshalb nur optional aktiviert werden.
+- OpenAI API ist nicht grundsätzlich kostenlos. Für einen vollständig kostenlosen Betrieb muss eine lokale oder anderweitig kostenfreie Analyse verwendet werden.
+- PostgreSQL-Dienste wie Supabase, Neon oder Railway dürfen nur innerhalb eines dauerhaft kostenlosen Kontingents eingesetzt werden und sind für den aktuellen Worker nicht erforderlich.
+
+Nicht konfigurierte kostenpflichtige Dienste dürfen den kostenlosen Standardbetrieb nicht verhindern. Telegram und E-Mail sollen als primäre kostenfreie Benachrichtigungskanäle verwendet werden.
+```
