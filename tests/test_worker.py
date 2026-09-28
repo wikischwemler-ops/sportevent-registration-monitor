@@ -194,3 +194,11 @@ def test_build_run_summary_contains_run_counts_and_statuses():
     assert "Fehler: 1" in summary
     assert "OPEN: 1" in summary
     assert "Trail: timeout" in summary
+
+
+def test_send_run_summary_reports_delivery_status(monkeypatch):
+    import worker
+
+    monkeypatch.setattr(worker, "send_telegram", lambda message: (True, None))
+
+    assert worker.send_run_summary([], [], "42") == {"status": "SENT", "error": None}

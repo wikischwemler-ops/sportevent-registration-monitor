@@ -129,10 +129,15 @@ def build_run_summary(events: list[dict], results: list[dict], run_number: str |
     return "\n".join(lines)
 
 
-def send_run_summary(events: list[dict], results: list[dict], run_number: str | None = None) -> None:
+def send_run_summary(events: list[dict], results: list[dict], run_number: str | None = None) -> dict:
     success, error = send_telegram(build_run_summary(events, results, run_number))
-    if not success and error != "Telegram nicht konfiguriert":
+    if success:
+        return {"status": "SENT", "error": None}
+    if error == "Telegram nicht konfiguriert":
+        return {"status": "NOT_CONFIGURED", "error": None}
+    if error:
         logger.warning("Telegram run summary failed: %s", error)
+    return {"status": "FAILED", "error": error}
 
 
 def notification_transition_key(event_id: int | str, old_status: str, new_status: str, content_hash: str | None) -> str:
@@ -341,8 +346,13 @@ def run_worker(
     updated_events, results = process_events(events, previous, now)
     snapshot = build_dashboard_snapshot(updated_events, results, now, run_number, run_url)
     export_dashboard(output_dir, snapshot)
-    send_run_summary(updated_events, results, run_number)
-    return {"events": len(results), "results": results, "snapshot": snapshot}
+    telegram_summary = send_run_summary(updated_events, results, run_number)
+    return {
+        "events": len(results),
+        "results": results,
+        "snapshot": snapshot,
+        "telegram_summary": telegram_summary,
+    }
 
 
 if __name__ == "__main__":
@@ -358,4 +368,7 @@ if __name__ == "__main__":
         run_number=os.environ.get("GITHUB_RUN_NUMBER"),
         run_url=run_url,
     )
-    print(json.dumps(result["results"], ensure_ascii=False, indent=2))
+    print(json.dumps({
+        "results": result["results"],
+        "telegram_summary": result["telegram_summary"],
+    }, ensure_ascii=False, indent=2))
