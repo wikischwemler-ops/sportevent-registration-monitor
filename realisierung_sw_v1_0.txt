@@ -126,6 +126,7 @@ Bereits vorhanden:
 - Kanalzustände `NOT_CONFIGURED`, `SENT` und `FAILED`
 - Telegram-API-Fehler werden trotz HTTP-Erfolg erkannt.
 - Telegram-Nachrichten werden auf die API-Maximallänge begrenzt.
+- Nach jedem Worker-Lauf wird eine Telegram-Zusammenfassung mit Prüfstatistik, Fehlern und Statusverteilung gesendet.
 
 Noch unvollständig:
 

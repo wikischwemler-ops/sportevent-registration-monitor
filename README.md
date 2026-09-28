@@ -52,3 +52,5 @@ TELEGRAM_CHAT_ID
 ```
 
 Der Worker prüft die Antwort der Telegram Bot API. Nicht konfigurierte Telegram-Werte werden als optionaler, nicht konfigurierter Kanal behandelt und stoppen den Monitoring-Lauf nicht.
+
+Nach jedem Worker-Lauf sendet Telegram außerdem eine Zusammenfassung mit der Anzahl geprüfter Events, Erfolgen, Fehlern und der aktuellen Statusverteilung. Diese Laufzusammenfassung ist unabhängig von einzelnen Statusalarmen.

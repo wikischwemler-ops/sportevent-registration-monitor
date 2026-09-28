@@ -3,6 +3,7 @@ from types import SimpleNamespace
 
 from worker import (
     build_dashboard_snapshot,
+    build_run_summary,
     load_events,
     process_events,
     source_candidates,
@@ -175,3 +176,21 @@ def test_notification_history_deduplicates_same_transition_content():
     )
 
     assert notifications == [(1, "SCHEDULED", "OPEN")]
+
+
+def test_build_run_summary_contains_run_counts_and_statuses():
+    summary = build_run_summary(
+        [{"status": "OPEN"}, {"status": "SCHEDULED"}],
+        [
+            {"id": 1, "name": "City Run", "ok": True},
+            {"id": 2, "name": "Trail", "ok": False, "error": "timeout"},
+        ],
+        run_number="42",
+    )
+
+    assert "Lauf abgeschlossen #42" in summary
+    assert "Geprüft: 2 von 2 Events" in summary
+    assert "Erfolgreich: 1" in summary
+    assert "Fehler: 1" in summary
+    assert "OPEN: 1" in summary
+    assert "Trail: timeout" in summary

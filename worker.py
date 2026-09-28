@@ -103,6 +103,38 @@ def notify_transition(event: dict, old_status: str, observation: dict) -> list[d
     return deliveries
 
 
+def build_run_summary(events: list[dict], results: list[dict], run_number: str | None = None) -> str:
+    status_counts = {}
+    for event in events:
+        status = event.get("status", "UNKNOWN")
+        status_counts[status] = status_counts.get(status, 0) + 1
+    status_line = ", ".join(
+        f"{status}: {count}" for status, count in sorted(status_counts.items())
+    ) or "keine Statusdaten"
+    failures = [result for result in results if not result.get("ok", False)]
+    run_label = f" #{run_number}" if run_number else ""
+    lines = [
+        f"Sportevent Monitor: Lauf abgeschlossen{run_label}",
+        f"Geprüft: {len(results)} von {len(events)} Events",
+        f"Erfolgreich: {len(results) - len(failures)}",
+        f"Fehler: {len(failures)}",
+        f"Status: {status_line}",
+    ]
+    if failures:
+        lines.append("Fehlerdetails:")
+        lines.extend(
+            f"- {result.get('name', result.get('id'))}: {result.get('error', 'unbekannter Fehler')}"
+            for result in failures[:5]
+        )
+    return "\n".join(lines)
+
+
+def send_run_summary(events: list[dict], results: list[dict], run_number: str | None = None) -> None:
+    success, error = send_telegram(build_run_summary(events, results, run_number))
+    if not success and error != "Telegram nicht konfiguriert":
+        logger.warning("Telegram run summary failed: %s", error)
+
+
 def notification_transition_key(event_id: int | str, old_status: str, new_status: str, content_hash: str | None) -> str:
     material = f"{event_id}:{old_status}:{new_status}:{content_hash or ''}"
     return sha256(material.encode("utf-8")).hexdigest()
@@ -309,6 +341,7 @@ def run_worker(
     updated_events, results = process_events(events, previous, now)
     snapshot = build_dashboard_snapshot(updated_events, results, now, run_number, run_url)
     export_dashboard(output_dir, snapshot)
+    send_run_summary(updated_events, results, run_number)
     return {"events": len(results), "results": results, "snapshot": snapshot}
 
 
