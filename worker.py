@@ -119,6 +119,7 @@ def build_run_summary(events: list[dict], results: list[dict], run_number: str |
         f"Erfolgreich: {len(results) - len(failures)}",
         f"Fehler: {len(failures)}",
         f"Status: {status_line}",
+        "Sportevent Monitor | Status: https://wikischwemler-ops.github.io/sportevent-registration-monitor/",
     ]
     if failures:
         lines.append("Fehlerdetails:")

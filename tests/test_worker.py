@@ -193,6 +193,7 @@ def test_build_run_summary_contains_run_counts_and_statuses():
     assert "Erfolgreich: 1" in summary
     assert "Fehler: 1" in summary
     assert "OPEN: 1" in summary
+    assert "Sportevent Monitor | Status: https://wikischwemler-ops.github.io/sportevent-registration-monitor/" in summary
     assert "Trail: timeout" in summary
 
 
